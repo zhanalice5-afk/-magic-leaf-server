@@ -31,6 +31,11 @@ export const bookPageSchema = z.object({
   image_prompt: z.string().optional(),
   image_url: z.string().optional(), // AI 生成的插画 URL
   spotlight: z.array(spotlightSchema),
+  question: z.object({
+    question_en: z.string(),
+    question_zh: z.string(),
+    hint: z.string().optional(),
+  }).optional(), // 每页的互动问题
 });
 
 // Book interaction definition

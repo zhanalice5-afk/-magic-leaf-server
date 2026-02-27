@@ -160,6 +160,10 @@ router.post("/generate", async (req, res) => {
       })
     );
 
+    // 选择封面图片：优先使用第一页的图片，否则使用中间页的图片
+    const coverImageUrl = contentWithImages.find((page) => page.image_url)?.image_url || 
+      contentWithImages[Math.floor(contentWithImages.length / 2)]?.image_url;
+
     // Save to database
     const client = getSupabaseClient();
     const { data, error } = await client
@@ -172,6 +176,7 @@ router.post("/generate", async (req, res) => {
         function_tag: generatedBook.functionTag,
         content: contentWithImages,
         interaction: generatedBook.interaction,
+        cover_image_url: coverImageUrl,
       })
       .select()
       .single();

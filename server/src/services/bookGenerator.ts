@@ -23,6 +23,11 @@ const bookPageSchema = z.object({
   audio_hint: z.string(),
   image_prompt: z.string().optional(),
   spotlight: z.array(spotlightSchema),
+  question: z.object({
+    question_en: z.string(),
+    question_zh: z.string(),
+    hint: z.string().optional(),
+  }).optional(), // 每页的互动问题
 });
 
 // Book interaction definition
@@ -135,6 +140,10 @@ ${functionTag ? `功能标签：${functionTag}` : ""}
 - 每页英文不超过${levelConfig.maxWords}个单词
 - 每页包含3-5个聚光灯词汇(spotlight)
 - 为每页生成一个image_prompt描述词（描述画面主体和场景，用英文）
+- **每页必须包含一个互动问题(question)**，引导孩子思考和表达：
+  - question_en: 英文问题，简单有趣
+  - question_zh: 中文翻译
+  - hint: 给家长的互动提示
 - 在interaction部分，Magic Buddy要以亲切的双语形式向孩子提问
 
 请严格按照以下JSON格式输出，不要添加任何其他文字：
@@ -154,7 +163,12 @@ ${functionTag ? `功能标签：${functionTag}` : ""}
       "image_prompt": "A cute fluffy orange kitten sitting on soft green grass, looking curious with big round eyes, tiny colorful flowers around",
       "spotlight": [
         { "object": "cat", "phonics": "c-a-t", "animation_effect": "bounce" }
-      ]
+      ],
+      "question": {
+        "question_en": "What color is the kitten?",
+        "question_zh": "小猫是什么颜色的？",
+        "hint": "引导孩子观察画面，用英文回答颜色"
+      }
     }
   ],
   "interaction": {

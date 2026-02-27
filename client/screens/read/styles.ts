@@ -420,5 +420,92 @@ export const createStyles = (theme: Theme) => {
       backgroundColor: '#4A7C59',
       width: 20,
     },
+    
+    // Question Section - 互动问题
+    questionSection: {
+      backgroundColor: '#FFF9E6',
+      borderRadius: BorderRadius.xl,
+      padding: Spacing.lg,
+      marginBottom: Spacing.lg,
+      borderWidth: 2,
+      borderColor: '#FFD700',
+      shadowColor: '#FFD700',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    questionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: Spacing.md,
+    },
+    questionIcon: {
+      fontSize: 24,
+      marginRight: Spacing.sm,
+    },
+    questionLabel: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#B8860B',
+    },
+    questionCard: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      marginBottom: Spacing.md,
+    },
+    questionTextEn: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: '#2D4A35',
+      marginBottom: Spacing.xs,
+      lineHeight: 24,
+    },
+    questionTextZh: {
+      fontSize: 15,
+      color: '#5A6B5C',
+      lineHeight: 22,
+    },
+    questionHintBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      marginTop: Spacing.sm,
+      paddingTop: Spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: '#E8E8E8',
+    },
+    questionHintIcon: {
+      fontSize: 14,
+      marginRight: Spacing.xs,
+    },
+    questionHintText: {
+      flex: 1,
+      fontSize: 12,
+      color: '#8B7355',
+      fontStyle: 'italic',
+    },
+    answerButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#4A7C59',
+      paddingVertical: Spacing.md,
+      borderRadius: BorderRadius.lg,
+      shadowColor: '#4A7C59',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    answerButtonIcon: {
+      fontSize: 20,
+      marginRight: Spacing.sm,
+    },
+    answerButtonText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
   });
 };

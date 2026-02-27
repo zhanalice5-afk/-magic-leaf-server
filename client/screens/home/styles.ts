@@ -375,6 +375,62 @@ export const createStyles = (theme: Theme) => {
       fontSize: 11,
       color: '#8B9A8D',
     },
+    searchResultFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: Spacing.xs,
+    },
+    freeTag: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: '#FFFFFF',
+      backgroundColor: '#4A7C59',
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 2,
+      borderRadius: BorderRadius.full,
+    },
+    sourcesSection: {
+      marginBottom: Spacing.lg,
+    },
+    sourcesTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#2D4A35',
+      marginBottom: Spacing.md,
+    },
+    sourceItem: {
+      backgroundColor: '#F0F7F2',
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      marginBottom: Spacing.sm,
+      borderLeftWidth: 3,
+      borderLeftColor: '#4A7C59',
+    },
+    sourceName: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#2D4A35',
+      marginBottom: Spacing.xs,
+    },
+    sourceDesc: {
+      fontSize: 12,
+      color: '#5A6B5C',
+      marginBottom: Spacing.xs,
+    },
+    sourceUrl: {
+      fontSize: 11,
+      color: '#4A7C59',
+    },
+    resultsSection: {
+      marginTop: Spacing.md,
+    },
+    resultsTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#2D4A35',
+      marginBottom: Spacing.md,
+    },
     searchEmpty: {
       alignItems: 'center',
       paddingVertical: Spacing['4xl'],

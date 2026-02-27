@@ -102,6 +102,11 @@ interface BookPage {
   image_prompt?: string;
   image_url?: string;
   spotlight: Spotlight[];
+  question?: {
+    question_en: string;
+    question_zh: string;
+    hint?: string;
+  };
 }
 
 interface BookInteraction {
@@ -550,6 +555,36 @@ export default function ReadScreen() {
             <Text style={styles.hint}>💡 {currentPageData.audio_hint}</Text>
           )}
         </View>
+
+        {/* Question Section - 互动问题区 */}
+        {currentPageData.question && (
+          <View style={styles.questionSection}>
+            <View style={styles.questionHeader}>
+              <Text style={styles.questionIcon}>❓</Text>
+              <Text style={styles.questionLabel}>互动时刻</Text>
+            </View>
+            <View style={styles.questionCard}>
+              <Text style={styles.questionTextEn}>{currentPageData.question.question_en}</Text>
+              <Text style={styles.questionTextZh}>{currentPageData.question.question_zh}</Text>
+              {currentPageData.question.hint && (
+                <View style={styles.questionHintBox}>
+                  <Text style={styles.questionHintIcon}>💡</Text>
+                  <Text style={styles.questionHintText}>家长提示: {currentPageData.question.hint}</Text>
+                </View>
+              )}
+            </View>
+            <TouchableOpacity 
+              style={styles.answerButton}
+              onPress={() => {
+                // 触发录音功能
+                handleMicPress();
+              }}
+            >
+              <Text style={styles.answerButtonIcon}>🎤</Text>
+              <Text style={styles.answerButtonText}>点我来回答</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Interaction Section - Magic Buddy (only on last page) */}
         {currentPage === totalPages - 1 && book.interaction && (
