@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   ScrollView,
   TouchableOpacity,
@@ -6,34 +6,30 @@ import {
   ActivityIndicator,
   View,
   Image,
+  Text,
+  Animated,
+  Modal,
+  FlatList,
+  Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { Audio } from 'expo-av';
 import { Screen } from '@/components/Screen';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { createStyles } from './styles';
+import { Spacing } from '@/constants/theme';
+import { createFormDataFile } from '@/utils';
 
 // Level configurations
 const LEVELS = [
-  {
-    level: 1,
-    name: '启蒙版',
-    emoji: '🌱',
-    description: '词汇启蒙\n简单短语',
-  },
-  {
-    level: 2,
-    name: '成长版',
-    emoji: '🌿',
-    description: '简单句式\n重复表达',
-  },
-  {
-    level: 3,
-    name: '飞跃版',
-    emoji: '🌳',
-    description: '完整故事\n逻辑叙事',
-  },
+  { level: 1, name: '启蒙版', emoji: '🌱', description: '词汇启蒙\n简单短语' },
+  { level: 2, name: '成长版', emoji: '🌿', description: '简单句式\n重复表达' },
+  { level: 3, name: '飞跃版', emoji: '🌳', description: '完整故事\n逻辑叙事' },
 ];
 
 // Theme suggestions based on level
@@ -64,6 +60,80 @@ const THEME_SUGGESTIONS: Record<number, { emoji: string; name: string }[]> = {
   ],
 };
 
+// Cross-platform audio recorder
+class CrossPlatformAudioRecorder {
+  private recording: Audio.Recording | null = null;
+  private mediaRecorder: any = null;
+  private audioChunks: any[] = [];
+  private isWeb: boolean;
+
+  constructor() {
+    this.isWeb = Platform.OS === 'web';
+  }
+
+  async start(): Promise<void> {
+    if (this.isWeb) {
+      // Web 使用 MediaRecorder
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.mediaRecorder = new MediaRecorder(stream);
+        this.audioChunks = [];
+        
+        this.mediaRecorder.ondataavailable = (e: any) => {
+          this.audioChunks.push(e.data);
+        };
+        
+        this.mediaRecorder.start();
+      } catch (e) {
+        console.error('Failed to start web recording:', e);
+        throw e;
+      }
+    } else {
+      // Mobile 使用 expo-av
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error('Permission denied');
+      }
+      
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      this.recording = recording;
+    }
+  }
+
+  async stop(): Promise<string | null> {
+    if (this.isWeb) {
+      return new Promise((resolve) => {
+        if (!this.mediaRecorder) {
+          resolve(null);
+          return;
+        }
+        
+        this.mediaRecorder.onstop = () => {
+          const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
+          const url = URL.createObjectURL(blob);
+          resolve(url);
+        };
+        
+        this.mediaRecorder.stop();
+      });
+    } else {
+      if (!this.recording) return null;
+      
+      await this.recording.stopAndUnloadAsync();
+      const uri = this.recording.getURI();
+      this.recording = null;
+      return uri;
+    }
+  }
+}
+
 interface Book {
   id: string;
   title: string;
@@ -73,22 +143,45 @@ interface Book {
   created_at: string;
 }
 
+interface OnlineBook {
+  title: string;
+  description: string;
+  sourceUrl?: string;
+  sourceSite?: string;
+}
+
 export default function HomeScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const router = useSafeRouter();
 
+  // State
   const [selectedLevel, setSelectedLevel] = useState<number>(1);
   const [selectedTheme, setSelectedTheme] = useState<string>('');
   const [interestTag, setInterestTag] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [recentBooks, setRecentBooks] = useState<Book[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(true);
+  
+  // Voice input state
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const recorderRef = useRef<CrossPlatformAudioRecorder | null>(null);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  
+  // Search modal state
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<OnlineBook[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Fetch recent books on mount
-  React.useEffect(() => {
+  // Upload state
+  const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
     fetchRecentBooks();
+    recorderRef.current = new CrossPlatformAudioRecorder();
   }, []);
 
   const fetchRecentBooks = async () => {
@@ -105,18 +198,128 @@ export default function HomeScreen() {
 
   const themes = THEME_SUGGESTIONS[selectedLevel] || THEME_SUGGESTIONS[1];
 
-  const handleGenerateBook = useCallback(async () => {
-    if (!selectedTheme) {
-      return;
+  // Voice input handler
+  const handleVoiceInput = async () => {
+    if (isRecording) {
+      // Stop recording
+      setIsRecording(false);
+      scaleAnim.stopAnimation();
+      scaleAnim.setValue(1);
+      setIsProcessingVoice(true);
+      
+      try {
+        const audioUri = await recorderRef.current?.stop();
+        
+        if (audioUri) {
+          // Send to ASR API
+          const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/asr`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audioUrl: audioUri }),
+          });
+          
+          const data = await response.json();
+          if (data.text) {
+            setInterestTag(data.text);
+          }
+        }
+      } catch (error) {
+        console.error('Voice input error:', error);
+      } finally {
+        setIsProcessingVoice(false);
+        recorderRef.current = new CrossPlatformAudioRecorder();
+      }
+    } else {
+      // Start recording
+      try {
+        await recorderRef.current?.start();
+        setIsRecording(true);
+        
+        // Pulse animation
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(scaleAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+            Animated.timing(scaleAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          ])
+        ).start();
+      } catch (error) {
+        console.error('Failed to start recording:', error);
+      }
     }
+  };
+
+  // Search online books
+  const handleSearchBooks = async () => {
+    if (!searchQuery.trim()) return;
+    
+    setIsSearching(true);
+    try {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery, count: 10 }),
+      });
+      
+      const data = await response.json();
+      setSearchResults(data.books || []);
+    } catch (error) {
+      console.error('Search error:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Upload eBook
+  const handleUploadBook = async () => {
+    try {
+      // 请求相册权限
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('提示', '需要相册权限才能上传绘本');
+        return;
+      }
+      
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets[0]) {
+        setIsUploading(true);
+        
+        const asset = result.assets[0];
+        const formData = new FormData();
+        
+        // 使用 createFormDataFile 创建跨平台兼容的文件对象
+        const file = await createFormDataFile(asset.uri, 'book-image.jpg', 'image/jpeg');
+        formData.append('file', file as any);
+        
+        const uploadResponse = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/upload-to-book`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        const data = await uploadResponse.json();
+        if (data.book) {
+          router.push('/read', { bookId: data.book.id });
+        }
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleGenerateBook = useCallback(async () => {
+    if (!selectedTheme) return;
 
     setIsLoading(true);
     try {
       const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/generate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           level: selectedLevel,
           theme: selectedTheme,
@@ -125,9 +328,7 @@ export default function HomeScreen() {
       });
 
       const data = await response.json();
-
       if (data.book) {
-        // Navigate to reading page
         router.push('/read', { bookId: data.book.id });
       }
     } catch (error) {
@@ -144,144 +345,169 @@ export default function HomeScreen() {
   const isGenerateEnabled = selectedTheme !== '';
 
   return (
-    <Screen
-      backgroundColor="#FFF8E7"
-      statusBarStyle="light"
-      safeAreaEdges={['left', 'right', 'bottom']}
-    >
-      {/* Header with gradient */}
+    <Screen backgroundColor="#FFF8E7" statusBarStyle="light" safeAreaEdges={['left', 'right', 'bottom']}>
+      {/* Header */}
       <View style={[styles.headerGradient, { paddingTop: insets.top + Spacing.lg }]}>
-        <ThemedText style={styles.leafIcon}>🍃</ThemedText>
-        <ThemedText style={styles.headerTitle}>Magic Leaf</ThemedText>
-        <ThemedText style={styles.headerSubtitle}>
-          双语互动绘本 · 开启奇妙故事之旅
-        </ThemedText>
+        <Text style={styles.leafIcon}>🍃</Text>
+        <Text style={styles.headerTitle}>Magic Leaf</Text>
+        <Text style={styles.headerSubtitle}>双语互动绘本 · 开启奇妙故事之旅</Text>
       </View>
 
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={{ paddingBottom: insets.bottom + Spacing['2xl'] }}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: insets.bottom + Spacing['2xl'] }} showsVerticalScrollIndicator={false}>
+        {/* Quick Actions */}
+        <View style={styles.quickActions}>
+          <TouchableOpacity style={styles.quickActionButton} onPress={() => setSearchModalVisible(true)}>
+            <Text style={styles.quickActionIcon}>🔍</Text>
+            <Text style={styles.quickActionText}>搜索绘本</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionButton} onPress={handleUploadBook} disabled={isUploading}>
+            <Text style={styles.quickActionIcon}>📤</Text>
+            <Text style={styles.quickActionText}>{isUploading ? '上传中...' : '上传绘本'}</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Level Selection */}
-        <ThemedText style={styles.sectionTitle}>选择学习等级</ThemedText>
+        <Text style={styles.sectionTitle}>选择学习等级</Text>
         <View style={styles.levelContainer}>
           {LEVELS.map((level) => (
             <TouchableOpacity
               key={level.level}
-              style={[
-                styles.levelCard,
-                selectedLevel === level.level && styles.levelCardSelected,
-                level.level === 1 && styles.level1Card,
-                level.level === 2 && styles.level2Card,
-                level.level === 3 && styles.level3Card,
-              ]}
-              onPress={() => {
-                setSelectedLevel(level.level);
-                setSelectedTheme(''); // Reset theme when level changes
-              }}
+              style={[styles.levelCard, selectedLevel === level.level && styles.levelCardSelected]}
+              onPress={() => { setSelectedLevel(level.level); setSelectedTheme(''); }}
               activeOpacity={0.8}
             >
-              <ThemedText style={styles.levelEmoji}>{level.emoji}</ThemedText>
-              <ThemedText style={styles.levelName}>{level.name}</ThemedText>
-              <ThemedText style={styles.levelDesc}>{level.description}</ThemedText>
+              <Text style={styles.levelEmoji}>{level.emoji}</Text>
+              <Text style={styles.levelName}>{level.name}</Text>
+              <Text style={styles.levelDesc}>{level.description}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Theme Selection */}
-        <ThemedText style={styles.sectionTitle}>选择故事主题</ThemedText>
+        <Text style={styles.sectionTitle}>选择故事主题</Text>
         <View style={styles.themeGrid}>
           {themes.map((themeItem) => (
             <TouchableOpacity
               key={themeItem.name}
-              style={[
-                styles.themeCard,
-                selectedTheme === themeItem.name && styles.themeCardSelected,
-              ]}
+              style={[styles.themeCard, selectedTheme === themeItem.name && styles.themeCardSelected]}
               onPress={() => setSelectedTheme(themeItem.name)}
               activeOpacity={0.7}
             >
-              <ThemedText style={styles.themeEmoji}>{themeItem.emoji}</ThemedText>
-              <ThemedText style={styles.themeName}>{themeItem.name}</ThemedText>
+              <Text style={styles.themeEmoji}>{themeItem.emoji}</Text>
+              <Text style={styles.themeName}>{themeItem.name}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Interest Tag Input */}
+        {/* Interest Tag Input with Voice */}
         <View style={styles.inputSection}>
-          <ThemedText style={styles.inputLabel}>宝贝的兴趣标签（可选）</ThemedText>
-          <TextInput
-            style={styles.input}
-            placeholder="例如：恐龙、公主、机器人..."
-            placeholderTextColor="#B8C9BC"
-            value={interestTag}
-            onChangeText={setInterestTag}
-          />
+          <Text style={styles.inputLabel}>宝贝的兴趣标签（可选）</Text>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder="例如：恐龙、公主、机器人..."
+              placeholderTextColor="#B8C9BC"
+              value={interestTag}
+              onChangeText={setInterestTag}
+            />
+            <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+              <TouchableOpacity
+                style={[styles.voiceButton, isRecording && styles.voiceButtonActive]}
+                onPress={handleVoiceInput}
+                disabled={isProcessingVoice}
+              >
+                <Text style={styles.voiceButtonIcon}>
+                  {isProcessingVoice ? '⏳' : isRecording ? '⏹️' : '🎤'}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+          {isRecording && <Text style={styles.recordingHint}>正在录音，点击停止...</Text>}
         </View>
 
         {/* Generate Button */}
         <TouchableOpacity
-          style={[
-            styles.generateButton,
-            !isGenerateEnabled && styles.generateButtonDisabled,
-          ]}
+          style={[styles.generateButton, !isGenerateEnabled && styles.generateButtonDisabled]}
           onPress={handleGenerateBook}
           disabled={!isGenerateEnabled || isLoading}
           activeOpacity={0.8}
         >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <ThemedText style={styles.generateButtonText}>
-              ✨ 生成魔法绘本
-            </ThemedText>
-          )}
+          {isLoading ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.generateButtonText}>✨ 生成魔法绘本</Text>}
         </TouchableOpacity>
 
         {/* Recent Books */}
         <View style={styles.booksSection}>
-          <ThemedText style={styles.sectionTitle}>最近绘本</ThemedText>
+          <Text style={styles.sectionTitle}>最近绘本</Text>
           {isLoadingBooks ? (
             <ActivityIndicator color="#4A7C59" size="large" />
           ) : recentBooks.length > 0 ? (
             recentBooks.map((book) => (
-              <TouchableOpacity
-                key={book.id}
-                style={styles.bookCard}
-                onPress={() => handleReadBook(book.id)}
-                activeOpacity={0.7}
-              >
-                <Image
-                  source={{ uri: `https://picsum.photos/120/160?random=${book.id}` }}
-                  style={styles.bookCover}
-                />
+              <TouchableOpacity key={book.id} style={styles.bookCard} onPress={() => handleReadBook(book.id)} activeOpacity={0.7}>
+                <Image source={{ uri: `https://picsum.photos/120/160?random=${book.id}` }} style={styles.bookCover} />
                 <View style={styles.bookInfo}>
-                  <ThemedText style={styles.bookTitle} numberOfLines={1}>
-                    {book.theme} - Level {book.level}
-                  </ThemedText>
-                  <ThemedText style={styles.bookMeta}>
-                    {book.interest_tag} · {new Date(book.created_at).toLocaleDateString()}
-                  </ThemedText>
-                  <ThemedText style={styles.bookLevel}>
-                    {LEVELS.find(l => l.level === book.level)?.name || 'Level ' + book.level}
-                  </ThemedText>
+                  <Text style={styles.bookTitle} numberOfLines={1}>{book.theme} - Level {book.level}</Text>
+                  <Text style={styles.bookMeta}>{book.interest_tag} · {new Date(book.created_at).toLocaleDateString()}</Text>
+                  <Text style={styles.bookLevel}>{LEVELS.find(l => l.level === book.level)?.name || 'Level ' + book.level}</Text>
                 </View>
               </TouchableOpacity>
             ))
           ) : (
             <View style={styles.emptyState}>
-              <ThemedText style={styles.emptyEmoji}>📚</ThemedText>
-              <ThemedText style={styles.emptyText}>
-                还没有绘本哦\n选择主题开始创作吧！
-              </ThemedText>
+              <Text style={styles.emptyEmoji}>📚</Text>
+              <Text style={styles.emptyText}>还没有绘本哦{'\n'}选择主题开始创作吧！</Text>
             </View>
           )}
         </View>
       </ScrollView>
+
+      {/* Search Modal */}
+      <Modal visible={searchModalVisible} animationType="slide" transparent>
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { paddingBottom: insets.bottom + Spacing.lg }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>🔍 搜索在线绘本</Text>
+              <TouchableOpacity onPress={() => setSearchModalVisible(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.searchInputRow}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="输入关键词搜索绘本..."
+                placeholderTextColor="#B8C9BC"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={handleSearchBooks}
+              />
+              <TouchableOpacity style={styles.searchButton} onPress={handleSearchBooks}>
+                <Text style={styles.searchButtonText}>搜索</Text>
+              </TouchableOpacity>
+            </View>
+
+            {isSearching ? (
+              <ActivityIndicator color="#4A7C59" size="large" style={styles.searchLoading} />
+            ) : searchResults.length > 0 ? (
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item, index) => index.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.searchResultItem}>
+                    <Text style={styles.searchResultTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.searchResultDesc} numberOfLines={2}>{item.description}</Text>
+                    {item.sourceSite && <Text style={styles.searchResultSource}>来源: {item.sourceSite}</Text>}
+                  </TouchableOpacity>
+                )}
+                style={styles.searchResultsList}
+              />
+            ) : (
+              <View style={styles.searchEmpty}>
+                <Text style={styles.searchEmptyText}>输入关键词搜索在线绘本资源</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
-
-// Import Spacing for header padding
-import { Spacing } from '@/constants/theme';

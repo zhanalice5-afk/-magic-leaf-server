@@ -237,5 +237,152 @@ export const createStyles = (theme: Theme) => {
       color: '#4A7C59',
       marginTop: Spacing.lg,
     },
+    // Quick Actions
+    quickActions: {
+      flexDirection: 'row',
+      gap: Spacing.md,
+      marginBottom: Spacing.lg,
+    },
+    quickActionButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#FFFFFF',
+      paddingVertical: Spacing.md,
+      borderRadius: BorderRadius.lg,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    quickActionIcon: {
+      fontSize: 18,
+      marginRight: Spacing.sm,
+    },
+    quickActionText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#4A7C59',
+    },
+    // Voice Input
+    inputRow: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+    },
+    voiceButton: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: '#F0F7F2',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: '#4A7C59',
+    },
+    voiceButtonActive: {
+      backgroundColor: '#D9534F',
+      borderColor: '#D9534F',
+    },
+    voiceButtonIcon: {
+      fontSize: 24,
+    },
+    recordingHint: {
+      fontSize: 12,
+      color: '#D9534F',
+      marginTop: Spacing.sm,
+      textAlign: 'center',
+    },
+    // Search Modal
+    modalContainer: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end',
+    },
+    modalContent: {
+      backgroundColor: '#FFFFFF',
+      borderTopLeftRadius: BorderRadius['2xl'],
+      borderTopRightRadius: BorderRadius['2xl'],
+      maxHeight: '80%',
+      padding: Spacing.lg,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: Spacing.lg,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: '#2D4A35',
+    },
+    modalClose: {
+      fontSize: 24,
+      color: '#6B7B6D',
+      padding: Spacing.sm,
+    },
+    searchInputRow: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+      marginBottom: Spacing.lg,
+    },
+    searchInput: {
+      flex: 1,
+      backgroundColor: '#F5F5F5',
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      fontSize: 16,
+      color: '#2D4A35',
+    },
+    searchButton: {
+      backgroundColor: '#4A7C59',
+      paddingHorizontal: Spacing.lg,
+      borderRadius: BorderRadius.lg,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    searchButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    searchLoading: {
+      marginTop: Spacing['2xl'],
+    },
+    searchResultsList: {
+      flex: 1,
+    },
+    searchResultItem: {
+      backgroundColor: '#F5F5F5',
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      marginBottom: Spacing.sm,
+    },
+    searchResultTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#2D4A35',
+      marginBottom: Spacing.xs,
+    },
+    searchResultDesc: {
+      fontSize: 12,
+      color: '#6B7B6D',
+      marginBottom: Spacing.xs,
+    },
+    searchResultSource: {
+      fontSize: 11,
+      color: '#8B9A8D',
+    },
+    searchEmpty: {
+      alignItems: 'center',
+      paddingVertical: Spacing['4xl'],
+    },
+    searchEmptyText: {
+      fontSize: 14,
+      color: '#8B9A8D',
+      textAlign: 'center',
+    },
   });
 };

@@ -1,11 +1,22 @@
 import express from "express";
+import multer from "multer";
 import { getSupabaseClient } from "../storage/database/supabase-client.js";
 import { generateBook, levelConfigs, themeSuggestions } from "../services/bookGenerator.js";
 import { generateBookIllustration } from "../services/imageGenerator.js";
 import { synthesizeSpeech } from "../services/ttsService.js";
+import { recognizeSpeech } from "../services/asrService.js";
+import { searchOnlineBooks } from "../services/bookSearchService.js";
+import { extractBookContent, generateIllustrationPrompt } from "../services/ebookProcessor.js";
 import { HeaderUtils } from "coze-coding-dev-sdk";
+import { uploadToStorage } from "../storage/object-storage/index.js";
 
 const router = express.Router();
+
+// 配置 multer 用于文件上传
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB 限制
+});
 
 /**
  * GET /api/v1/books/themes
@@ -294,6 +305,231 @@ router.delete("/:id", async (req, res) => {
   } catch (error) {
     console.error("Error in DELETE /books/:id:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * POST /api/v1/books/asr
+ * 语音识别接口 - 用于语音输入兴趣标签
+ * Body: { audioUrl?: string, audioBase64?: string }
+ */
+router.post("/asr", async (req, res) => {
+  try {
+    const { audioUrl, audioBase64 } = req.body;
+
+    if (!audioUrl && !audioBase64) {
+      return res.status(400).json({ error: "Either audioUrl or audioBase64 is required" });
+    }
+
+    const headers = HeaderUtils.extractForwardHeaders(
+      req.headers as Record<string, string>
+    );
+
+    const result = await recognizeSpeech({
+      audioUrl,
+      audioBase64,
+      headers,
+    });
+
+    res.json({
+      text: result.text,
+      duration: result.duration,
+    });
+  } catch (error) {
+    console.error("Error in POST /books/asr:", error);
+    res.status(500).json({ error: "Failed to recognize speech" });
+  }
+});
+
+/**
+ * POST /api/v1/books/search
+ * 在线绘本搜索接口
+ * Body: { query: string, language?: "zh"|"en"|"all", ageRange?: string, count?: number }
+ */
+router.post("/search", async (req, res) => {
+  try {
+    const { query, language, ageRange, count } = req.body;
+
+    if (!query || typeof query !== "string") {
+      return res.status(400).json({ error: "Query is required" });
+    }
+
+    const headers = HeaderUtils.extractForwardHeaders(
+      req.headers as Record<string, string>
+    );
+
+    const result = await searchOnlineBooks({
+      query,
+      language,
+      ageRange,
+      count,
+      headers,
+    });
+
+    res.json({
+      books: result.books,
+      summary: result.summary,
+    });
+  } catch (error) {
+    console.error("Error in POST /books/search:", error);
+    res.status(500).json({ error: "Failed to search books" });
+  }
+});
+
+/**
+ * POST /api/v1/books/upload
+ * 上传电子绘本接口（支持 PDF 或图片）
+ * FormData: file (PDF或图片文件)
+ */
+router.post("/upload", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const headers = HeaderUtils.extractForwardHeaders(
+      req.headers as Record<string, string>
+    );
+
+    const { buffer, originalname, mimetype } = req.file;
+
+    // 上传文件到对象存储
+    const uploadedFile = await uploadToStorage(buffer, originalname, mimetype);
+
+    // 如果是图片，直接返回URL
+    if (mimetype.startsWith("image/")) {
+      return res.json({
+        type: "image",
+        url: uploadedFile.url,
+        message: "Image uploaded successfully",
+      });
+    }
+
+    // 如果是 PDF，需要提取文本（这里简化处理，实际需要 PDF 解析库）
+    if (mimetype === "application/pdf") {
+      // TODO: 实际实现需要使用 PDF 解析库提取文本
+      // 这里返回上传成功信息，前端可以调用 extract 接口处理
+      return res.json({
+        type: "pdf",
+        url: uploadedFile.url,
+        key: uploadedFile.key,
+        message: "PDF uploaded successfully. Use /extract endpoint to process.",
+      });
+    }
+
+    res.json({
+      type: "other",
+      url: uploadedFile.url,
+      message: "File uploaded successfully",
+    });
+  } catch (error) {
+    console.error("Error in POST /books/upload:", error);
+    res.status(500).json({ error: "Failed to upload file" });
+  }
+});
+
+/**
+ * POST /api/v1/books/extract
+ * 从上传的文本内容中提取绘本内容
+ * Body: { text: string }
+ */
+router.post("/extract", async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    if (!text || typeof text !== "string") {
+      return res.status(400).json({ error: "Text content is required" });
+    }
+
+    const headers = HeaderUtils.extractForwardHeaders(
+      req.headers as Record<string, string>
+    );
+
+    const result = await extractBookContent(text, headers);
+
+    res.json(result);
+  } catch (error) {
+    console.error("Error in POST /books/extract:", error);
+    res.status(500).json({ error: "Failed to extract book content" });
+  }
+});
+
+/**
+ * POST /api/v1/books/upload-to-book
+ * 上传电子绘本并直接转换为可阅读的绘本
+ * FormData: file (PDF或图片文件), title?: string
+ */
+router.post("/upload-to-book", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const headers = HeaderUtils.extractForwardHeaders(
+      req.headers as Record<string, string>
+    );
+
+    const { buffer, originalname, mimetype } = req.file;
+    const title = req.body.title || originalname.replace(/\.[^/.]+$/, "");
+
+    // 上传文件到对象存储
+    const uploadedFile = await uploadToStorage(buffer, originalname, mimetype);
+
+    let bookContent;
+
+    if (mimetype.startsWith("image/")) {
+      // 单张图片创建简单绘本
+      bookContent = {
+        title,
+        pages: [{
+          pageNum: 1,
+          textEn: "Look at this picture!",
+          textZh: "看这张图片！",
+          imageUrl: uploadedFile.url,
+        }],
+      };
+    } else {
+      // 其他文件类型，需要用户后续提供文本内容
+      return res.json({
+        type: "file",
+        url: uploadedFile.url,
+        message: "File uploaded. Please provide text content to create book.",
+      });
+    }
+
+    // 保存到数据库
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from("books")
+      .insert({
+        title: bookContent.title,
+        level: 1,
+        theme: "上传绘本",
+        interest_tag: "自定义",
+        function_tag: "",
+        content: bookContent.pages.map((page, index) => ({
+          ...page,
+          page_num: index + 1,
+          spotlight: [],
+          audio_hint: "",
+        })),
+        interaction: { character_dialogue: "你喜欢这个故事吗？What do you think about this story?" },
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error saving uploaded book:", error);
+      return res.status(500).json({ error: "Failed to save book" });
+    }
+
+    res.status(201).json({
+      message: "Book created successfully",
+      book: data,
+    });
+  } catch (error) {
+    console.error("Error in POST /books/upload-to-book:", error);
+    res.status(500).json({ error: "Failed to process uploaded book" });
   }
 });
 

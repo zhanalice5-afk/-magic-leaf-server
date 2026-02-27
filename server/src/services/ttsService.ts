@@ -11,9 +11,24 @@ export interface SynthesizedAudio {
   audioSize: number;
 }
 
+// 语音配置 - 为儿童绘本选择最适合的声音
+const VOICE_CONFIG = {
+  // 中文声音：温暖亲切的儿童有声书风格
+  zh: {
+    speaker: "zh_female_xueayi_saturn_bigtts",
+    speechRate: 0, // 正常语速
+  },
+  // 英文声音：使用支持中英文的清晰女声，稍慢语速便于儿童理解
+  en: {
+    speaker: "zh_female_vv_uranus_bigtts", // 支持 Chinese & English，发音清晰
+    speechRate: -15, // 稍慢，便于儿童磨耳朵学习
+  },
+};
+
 /**
  * 语音合成服务
  * 为儿童绘本提供温暖亲切的语音朗读
+ * 中文使用儿童有声书风格，英文使用清晰标准发音
  */
 export async function synthesizeSpeech(
   params: SynthesizeSpeechParams
@@ -23,21 +38,16 @@ export async function synthesizeSpeech(
   const config = new Config();
   const client = new TTSClient(config, headers);
 
-  // 根据语言选择合适的语音
-  // 英文使用儿童有声书风格，中文使用亲切的女声
-  const speaker =
-    language === "en"
-      ? "zh_female_xueayi_saturn_bigtts" // 儿童有声书风格，支持中英文
-      : "zh_female_xueayi_saturn_bigtts"; // 儿童有声书风格
+  const voiceConfig = VOICE_CONFIG[language];
 
   try {
     const response = await client.synthesize({
       uid: `magic-leaf-user-${Date.now()}`,
       text,
-      speaker,
+      speaker: voiceConfig.speaker,
       audioFormat: "mp3",
       sampleRate: 24000, // 标准音质
-      speechRate: language === "en" ? -10 : 0, // 英文稍慢，便于儿童理解
+      speechRate: voiceConfig.speechRate,
       loudnessRate: 0,
     });
 
@@ -65,4 +75,16 @@ export async function synthesizePageAudio(
   ]);
 
   return { englishAudio, chineseAudio };
+}
+
+/**
+ * 批量合成多个文本的音频
+ */
+export async function synthesizeMultiple(
+  texts: Array<{ text: string; language: "en" | "zh" }>,
+  headers?: Record<string, string>
+): Promise<SynthesizedAudio[]> {
+  return Promise.all(
+    texts.map((item) => synthesizeSpeech({ ...item, headers }))
+  );
 }
