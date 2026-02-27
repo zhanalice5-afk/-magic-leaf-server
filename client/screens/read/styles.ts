@@ -2,6 +2,7 @@ import { StyleSheet, Dimensions } from 'react-native';
 import { Spacing, BorderRadius, Theme } from '@/constants/theme';
 
 const { width, height } = Dimensions.get('window');
+const isSmallScreen = width < 600;
 
 export const createStyles = (theme: Theme) => {
   return StyleSheet.create({
@@ -9,29 +10,8 @@ export const createStyles = (theme: Theme) => {
       flex: 1,
       backgroundColor: '#FFF8E7',
     },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: '#FFF8E7',
-    },
-    loadingAnimation: {
-      width: 120,
-      height: 120,
-      marginBottom: Spacing.xl,
-    },
-    loadingText: {
-      fontSize: 20,
-      color: '#4A7C59',
-      fontWeight: '600',
-      textAlign: 'center',
-    },
-    loadingSubtext: {
-      fontSize: 14,
-      color: '#8B9A8D',
-      marginTop: Spacing.sm,
-      textAlign: 'center',
-    },
+    
+    // Header
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -47,6 +27,7 @@ export const createStyles = (theme: Theme) => {
     },
     backButtonText: {
       fontSize: 24,
+      color: '#4A7C59',
     },
     headerTitle: {
       fontSize: 16,
@@ -58,224 +39,376 @@ export const createStyles = (theme: Theme) => {
       color: '#6B7B6D',
       fontWeight: '500',
     },
-    pageContainer: {
+    
+    // Loading
+    loadingContainer: {
       flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#FFF8E7',
     },
-    pageScroll: {
+    loadingText: {
+      fontSize: 18,
+      color: '#4A7C59',
+      fontWeight: '600',
+      marginTop: Spacing.lg,
+    },
+    
+    // Error
+    errorContainer: {
       flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: Spacing.xl,
     },
-    pageContent: {
+    errorEmoji: {
+      fontSize: 48,
+      marginBottom: Spacing.md,
+    },
+    errorText: {
+      fontSize: 16,
+      color: '#6B7B6D',
+      textAlign: 'center',
+      marginBottom: Spacing.lg,
+    },
+    retryButton: {
+      backgroundColor: '#4A7C59',
+      paddingHorizontal: Spacing.xl,
+      paddingVertical: Spacing.md,
+      borderRadius: BorderRadius.lg,
+    },
+    retryButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    
+    // Main Content
+    scrollContent: {
       flexGrow: 1,
-      paddingHorizontal: Spacing.lg,
-      paddingVertical: Spacing.xl,
+      padding: Spacing.lg,
     },
-    imageContainer: {
-      width: width - Spacing.lg * 2,
-      height: (width - Spacing.lg * 2) * 0.75,
+    
+    // Illustration Container - 圆形窗户风格
+    illustrationSection: {
+      alignItems: 'center',
+      marginBottom: Spacing.lg,
+    },
+    illustrationFrame: {
+      width: isSmallScreen ? width - Spacing.lg * 2 : 320,
+      height: isSmallScreen ? (width - Spacing.lg * 2) * 0.8 : 256,
       borderRadius: BorderRadius.xl,
       overflow: 'hidden',
-      backgroundColor: '#F5F5F5',
-      marginBottom: Spacing.xl,
-      shadowColor: '#4A7C59',
+      backgroundColor: '#F0E6D3',
+      borderWidth: 4,
+      borderColor: '#8B6914',
+      shadowColor: '#8B6914',
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.15,
+      shadowOpacity: 0.3,
       shadowRadius: 8,
-      elevation: 5,
+      elevation: 6,
     },
-    pageImage: {
+    illustrationImage: {
       width: '100%',
       height: '100%',
     },
-    textContainer: {
-      backgroundColor: '#FFFFFF',
-      borderRadius: BorderRadius.xl,
-      padding: Spacing.xl,
-      marginBottom: Spacing.lg,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 4,
-      elevation: 2,
-    },
-    englishText: {
-      fontSize: 22,
-      fontWeight: '600',
-      color: '#2D4A35',
-      lineHeight: 32,
-      marginBottom: Spacing.md,
-      textAlign: 'center',
-    },
-    chineseText: {
-      fontSize: 18,
-      color: '#6B7B6D',
-      lineHeight: 28,
-      textAlign: 'center',
-    },
-    // Audio controls
-    audioControls: {
-      flexDirection: 'row',
-      gap: Spacing.md,
-      marginBottom: Spacing.lg,
-    },
-    audioButton: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#F0F7F2',
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.md,
-      borderWidth: 2,
-      borderColor: '#E8E8E8',
-    },
-    audioButtonActive: {
-      backgroundColor: '#4A7C59',
-      borderColor: '#4A7C59',
-    },
-    audioButtonIcon: {
-      fontSize: 20,
-      marginRight: Spacing.sm,
-    },
-    audioButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: '#4A7C59',
-    },
-    audioHint: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: '#FFF8DC',
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.md,
-      marginBottom: Spacing.lg,
-      borderLeftWidth: 3,
-      borderLeftColor: '#FFD700',
-    },
-    audioHintIcon: {
-      fontSize: 20,
-      marginRight: Spacing.sm,
-    },
-    audioHintText: {
-      flex: 1,
-      fontSize: 13,
-      color: '#8B7355',
-      lineHeight: 18,
-    },
-    spotlightSection: {
-      marginBottom: Spacing.xl,
-    },
-    spotlightTitle: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: '#4A7C59',
-      marginBottom: Spacing.md,
-    },
-    spotlightGrid: {
+    
+    // Vocabulary Section - 单词词汇区
+    vocabularySection: {
       flexDirection: 'row',
       flexWrap: 'wrap',
+      justifyContent: 'center',
       gap: Spacing.sm,
+      marginBottom: Spacing.lg,
+      paddingHorizontal: Spacing.sm,
     },
-    spotlightCard: {
-      backgroundColor: '#FFFFFF',
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.md,
-      minWidth: 100,
+    vocabularyItem: {
+      flexDirection: 'row',
       alignItems: 'center',
+      backgroundColor: '#FFFFFF',
+      borderRadius: BorderRadius.full,
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: Spacing.md,
+      borderWidth: 2,
+      borderColor: '#E8E8E8',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.05,
       shadowRadius: 2,
       elevation: 1,
-      borderWidth: 2,
-      borderColor: '#E8E8E8',
     },
-    spotlightCardActive: {
+    vocabularyItemActive: {
+      backgroundColor: '#4A7C59',
       borderColor: '#4A7C59',
-      backgroundColor: '#F0F7F2',
     },
-    spotlightEmoji: {
-      fontSize: 24,
+    vocabularyWord: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#2D4A35',
+      marginRight: Spacing.xs,
+    },
+    vocabularyWordActive: {
+      color: '#FFFFFF',
+    },
+    vocabularySpeaker: {
+      fontSize: 16,
+    },
+    
+    // Text Section - 双语文本区
+    textSection: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: BorderRadius.xl,
+      padding: Spacing.lg,
+      marginBottom: Spacing.lg,
+      shadowColor: '#4A7C59',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    textRow: {
+      marginBottom: Spacing.md,
+    },
+    languageLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#4A7C59',
+      letterSpacing: 1,
       marginBottom: Spacing.xs,
     },
-    spotlightWord: {
+    sentenceRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+    },
+    sentenceText: {
+      flex: 1,
+      fontSize: 18,
+      fontWeight: '500',
+      color: '#2D4A35',
+      lineHeight: 26,
+    },
+    sentenceTextZh: {
+      fontSize: 16,
+      color: '#5A6B5C',
+      lineHeight: 24,
+    },
+    speakButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#F0F7F2',
+      borderRadius: BorderRadius.full,
+      paddingVertical: Spacing.xs,
+      paddingHorizontal: Spacing.sm,
+      marginLeft: Spacing.sm,
+      borderWidth: 1,
+      borderColor: '#4A7C59',
+    },
+    speakButtonActive: {
+      backgroundColor: '#4A7C59',
+    },
+    speakButtonIcon: {
+      fontSize: 14,
+      marginRight: 2,
+    },
+    speakButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#4A7C59',
+    },
+    speakButtonTextActive: {
+      color: '#FFFFFF',
+    },
+    divider: {
+      height: 1,
+      backgroundColor: '#E8E8E8',
+      marginVertical: Spacing.md,
+    },
+    hint: {
+      fontSize: 13,
+      color: '#8B9A8D',
+      fontStyle: 'italic',
+      marginTop: Spacing.xs,
+    },
+    
+    // Interaction Section - Magic Buddy
+    interactionSection: {
+      backgroundColor: '#4A7C59',
+      borderRadius: BorderRadius.xl,
+      padding: Spacing.lg,
+      marginBottom: Spacing.lg,
+    },
+    buddyHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: Spacing.md,
+    },
+    buddyStar: {
+      fontSize: 20,
+      marginRight: Spacing.sm,
+    },
+    buddyTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#FFFFFF',
+    },
+    buddyQuestion: {
+      marginBottom: Spacing.md,
+    },
+    buddyQuestionEn: {
+      fontSize: 15,
+      fontWeight: '500',
+      color: '#FFFFFF',
+      lineHeight: 22,
+      marginBottom: Spacing.xs,
+    },
+    buddyQuestionZh: {
+      fontSize: 14,
+      color: 'rgba(255,255,255,0.8)',
+      lineHeight: 20,
+    },
+    saveButton: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: BorderRadius.lg,
+      paddingVertical: Spacing.md,
+      alignItems: 'center',
+      marginTop: Spacing.sm,
+    },
+    saveButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#4A7C59',
+    },
+    
+    // Practice Section - 口语练习
+    practiceSection: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: BorderRadius.xl,
+      padding: Spacing.lg,
+      marginBottom: Spacing.lg,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    practiceHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: Spacing.md,
+    },
+    practiceMicIcon: {
+      fontSize: 20,
+      marginRight: Spacing.sm,
+    },
+    practiceTitle: {
       fontSize: 16,
       fontWeight: '700',
       color: '#2D4A35',
-      marginBottom: 2,
     },
-    spotlightPhonics: {
-      fontSize: 11,
-      color: '#8B9A8D',
-    },
-    interactionSection: {
-      backgroundColor: '#FFFFFF',
-      borderRadius: BorderRadius.xl,
-      padding: Spacing.xl,
-      marginBottom: Spacing.lg,
-      borderLeftWidth: 4,
-      borderLeftColor: '#F9A825',
-    },
-    buddyAvatar: {
-      fontSize: 32,
+    micButton: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: '#4A7C59',
+      justifyContent: 'center',
+      alignItems: 'center',
       marginBottom: Spacing.sm,
+      shadowColor: '#4A7C59',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 4,
     },
-    buddyDialogue: {
-      fontSize: 16,
-      color: '#2D4A35',
-      lineHeight: 24,
-      fontStyle: 'italic',
+    micButtonActive: {
+      backgroundColor: '#D9534F',
+      transform: [{ scale: 1.1 }],
     },
-    branchingContainer: {
-      marginTop: Spacing.lg,
-      gap: Spacing.md,
+    micIcon: {
+      fontSize: 32,
+      color: '#FFFFFF',
     },
-    branchButton: {
-      backgroundColor: '#F0F7F2',
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.lg,
-      borderWidth: 2,
-      borderColor: '#4A7C59',
-    },
-    branchButtonText: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: '#4A7C59',
+    practiceHint: {
+      fontSize: 13,
+      color: '#6B7B6D',
       textAlign: 'center',
     },
-    navigationContainer: {
+    practiceResult: {
+      marginTop: Spacing.md,
+      padding: Spacing.md,
+      backgroundColor: '#F0F7F2',
+      borderRadius: BorderRadius.lg,
+      width: '100%',
+    },
+    practiceResultText: {
+      fontSize: 14,
+      color: '#2D4A35',
+      textAlign: 'center',
+    },
+    
+    // Progress Section
+    progressSection: {
+      marginTop: Spacing.md,
+      alignItems: 'center',
+      width: '100%',
+    },
+    progressLabel: {
       flexDirection: 'row',
       justifyContent: 'space-between',
+      width: '100%',
+      marginBottom: Spacing.xs,
+    },
+    progressLabelText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#6B7B6D',
+      letterSpacing: 1,
+    },
+    progressBar: {
+      height: 8,
+      backgroundColor: '#E8E8E8',
+      borderRadius: 4,
+      width: '100%',
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: '100%',
+      backgroundColor: '#4A7C59',
+      borderRadius: 4,
+    },
+    progressPage: {
+      fontSize: 12,
+      color: '#6B7B6D',
+      marginTop: Spacing.xs,
+    },
+    
+    // Navigation
+    navigation: {
+      flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: Spacing.lg,
-      paddingVertical: Spacing.lg,
+      justifyContent: 'space-between',
+      padding: Spacing.lg,
       backgroundColor: '#FFFFFF',
       borderTopWidth: 1,
       borderTopColor: '#E8E8E8',
     },
     navButton: {
-      paddingVertical: Spacing.md,
-      paddingHorizontal: Spacing.xl,
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: Spacing.md,
       borderRadius: BorderRadius.lg,
-      minWidth: 80,
-      alignItems: 'center',
     },
-    prevButton: {
-      backgroundColor: '#F5F5F5',
-    },
-    nextButton: {
-      backgroundColor: '#4A7C59',
+    navButtonDisabled: {
+      opacity: 0.4,
     },
     navButtonText: {
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: '600',
-      color: '#6B7B6D',
-    },
-    navButtonTextActive: {
-      color: '#FFFFFF',
+      color: '#4A7C59',
     },
     pageDots: {
       flexDirection: 'row',
-      gap: Spacing.sm,
+      gap: Spacing.xs,
     },
     pageDot: {
       width: 8,
@@ -285,34 +418,7 @@ export const createStyles = (theme: Theme) => {
     },
     pageDotActive: {
       backgroundColor: '#4A7C59',
-      width: 24,
-    },
-    errorContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: Spacing.xl,
-    },
-    errorEmoji: {
-      fontSize: 48,
-      marginBottom: Spacing.lg,
-    },
-    errorText: {
-      fontSize: 16,
-      color: '#6B7B6D',
-      textAlign: 'center',
-      marginBottom: Spacing.xl,
-    },
-    retryButton: {
-      backgroundColor: '#4A7C59',
-      paddingVertical: Spacing.lg,
-      paddingHorizontal: Spacing.xl,
-      borderRadius: BorderRadius.lg,
-    },
-    retryButtonText: {
-      color: '#FFFFFF',
-      fontSize: 16,
-      fontWeight: '600',
+      width: 20,
     },
   });
 };
