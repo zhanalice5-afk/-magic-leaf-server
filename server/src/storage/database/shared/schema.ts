@@ -29,6 +29,7 @@ export const bookPageSchema = z.object({
   text_zh: z.string(),
   audio_hint: z.string(),
   image_prompt: z.string().optional(),
+  image_url: z.string().optional(), // AI 生成的插画 URL
   spotlight: z.array(spotlightSchema),
 });
 

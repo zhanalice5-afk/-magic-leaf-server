@@ -1,17 +1,20 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
   View,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { Audio } from 'expo-av';
 import { Screen } from '@/components/Screen';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { createStyles } from './styles';
+import { Spacing } from '@/constants/theme';
 
 interface Spotlight {
   object: string;
@@ -25,6 +28,7 @@ interface BookPage {
   text_zh: string;
   audio_hint: string;
   image_prompt?: string;
+  image_url?: string; // AI 生成的插画 URL
   spotlight: Spotlight[];
 }
 
@@ -44,6 +48,8 @@ interface Book {
   created_at: string;
 }
 
+type PlayingState = 'idle' | 'loading' | 'playing';
+
 export default function ReadScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -57,6 +63,20 @@ export default function ReadScreen() {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [activeSpotlight, setActiveSpotlight] = useState<string | null>(null);
+  
+  // Audio state
+  const [playingState, setPlayingState] = useState<PlayingState>('idle');
+  const [currentLanguage, setCurrentLanguage] = useState<'en' | 'zh'>('en');
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
 
   // Fetch book data
   useEffect(() => {
@@ -89,6 +109,73 @@ export default function ReadScreen() {
     fetchBook();
   }, [bookId]);
 
+  // Stop audio when page changes
+  useEffect(() => {
+    stopAudio();
+    setPlayingState('idle');
+  }, [currentPage]);
+
+  const stopAudio = async () => {
+    if (soundRef.current) {
+      await soundRef.current.stopAsync();
+      await soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
+  };
+
+  const handlePlayAudio = useCallback(async (language: 'en' | 'zh') => {
+    if (!book) return;
+    
+    const pageData = book.content[currentPage];
+    const text = language === 'en' ? pageData.text_en : pageData.text_zh;
+
+    // 如果正在播放同一种语言，停止播放
+    if (playingState === 'playing' && currentLanguage === language) {
+      await stopAudio();
+      setPlayingState('idle');
+      return;
+    }
+
+    // 停止当前播放
+    await stopAudio();
+
+    setPlayingState('loading');
+    setCurrentLanguage(language);
+
+    try {
+      // 调用后端 TTS 接口
+      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/tts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text, language }),
+      });
+
+      const data = await response.json();
+
+      if (data.audioUri) {
+        // 播放音频
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: data.audioUri },
+          { shouldPlay: true },
+          (status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setPlayingState('idle');
+            }
+          }
+        );
+        soundRef.current = sound;
+        setPlayingState('playing');
+      } else {
+        setPlayingState('idle');
+      }
+    } catch (err) {
+      console.error('Failed to play audio:', err);
+      setPlayingState('idle');
+    }
+  }, [book, currentPage, playingState, currentLanguage]);
+
   const handlePrevPage = useCallback(() => {
     if (currentPage > 0) {
       setCurrentPage(currentPage - 1);
@@ -110,7 +197,6 @@ export default function ReadScreen() {
   const handleRetry = useCallback(() => {
     setIsLoading(true);
     setError(null);
-    // Re-trigger the effect
     if (bookId) {
       fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/${bookId}`)
         .then((res) => res.json())
@@ -169,6 +255,10 @@ export default function ReadScreen() {
 
   const currentPageData = book.content[currentPage];
   const totalPages = book.content.length;
+  
+  // 使用生成的插画 URL，如果没有则使用备用图片
+  const imageUrl = currentPageData.image_url || 
+    `https://picsum.photos/800/600?random=${book.id}-${currentPage}`;
 
   return (
     <Screen backgroundColor="#FFF8E7" statusBarStyle="dark">
@@ -197,9 +287,7 @@ export default function ReadScreen() {
         {/* Illustration */}
         <View style={styles.imageContainer}>
           <Image
-            source={{
-              uri: `https://picsum.photos/800/600?random=${book.id}-${currentPage}`,
-            }}
+            source={{ uri: imageUrl }}
             style={styles.pageImage}
             contentFit="cover"
             transition={300}
@@ -210,6 +298,45 @@ export default function ReadScreen() {
         <View style={styles.textContainer}>
           <ThemedText style={styles.englishText}>{currentPageData.text_en}</ThemedText>
           <ThemedText style={styles.chineseText}>{currentPageData.text_zh}</ThemedText>
+        </View>
+
+        {/* Audio Controls */}
+        <View style={styles.audioControls}>
+          <TouchableOpacity
+            style={[
+              styles.audioButton,
+              playingState === 'playing' && currentLanguage === 'en' && styles.audioButtonActive,
+            ]}
+            onPress={() => handlePlayAudio('en')}
+            disabled={playingState === 'loading'}
+          >
+            {playingState === 'loading' && currentLanguage === 'en' ? (
+              <ActivityIndicator color="#4A7C59" size="small" />
+            ) : (
+              <ThemedText style={styles.audioButtonIcon}>
+                {playingState === 'playing' && currentLanguage === 'en' ? '⏸️' : '🔊'}
+              </ThemedText>
+            )}
+            <ThemedText style={styles.audioButtonText}>英文朗读</ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.audioButton,
+              playingState === 'playing' && currentLanguage === 'zh' && styles.audioButtonActive,
+            ]}
+            onPress={() => handlePlayAudio('zh')}
+            disabled={playingState === 'loading'}
+          >
+            {playingState === 'loading' && currentLanguage === 'zh' ? (
+              <ActivityIndicator color="#4A7C59" size="small" />
+            ) : (
+              <ThemedText style={styles.audioButtonIcon}>
+                {playingState === 'playing' && currentLanguage === 'zh' ? '⏸️' : '🔈'}
+              </ThemedText>
+            )}
+            <ThemedText style={styles.audioButtonText}>中文朗读</ThemedText>
+          </TouchableOpacity>
         </View>
 
         {/* Audio Hint */}
@@ -379,11 +506,13 @@ function getEmojiForWord(word: string): string {
     forest: '🌲',
     ocean: '🌊',
     mountain: '⛰️',
+    rabbit: '🐰',
+    kitten: '🐱',
+    puppy: '🐶',
+    butterfly: '🦋',
+    leaf: '🍃',
   };
 
   const lowerWord = word.toLowerCase();
   return emojiMap[lowerWord] || '📝';
 }
-
-// Import Spacing
-import { Spacing } from '@/constants/theme';

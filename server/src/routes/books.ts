@@ -1,6 +1,8 @@
 import express from "express";
 import { getSupabaseClient } from "../storage/database/supabase-client.js";
 import { generateBook, levelConfigs, themeSuggestions } from "../services/bookGenerator.js";
+import { generateBookIllustration } from "../services/imageGenerator.js";
+import { synthesizeSpeech } from "../services/ttsService.js";
 import { HeaderUtils } from "coze-coding-dev-sdk";
 
 const router = express.Router();
@@ -88,7 +90,7 @@ router.get("/:id", async (req, res) => {
 
 /**
  * POST /api/v1/books/generate
- * 生成新的绘本
+ * 生成新的绘本（包含AI生成插画）
  * Body: { level: 1|2|3, theme: string, interestTag: string, functionTag?: string }
  */
 router.post("/generate", async (req, res) => {
@@ -111,7 +113,7 @@ router.post("/generate", async (req, res) => {
       req.headers as Record<string, string>
     );
 
-    // Generate book using LLM
+    // Generate book content using LLM
     const generatedBook = await generateBook({
       level: level as 1 | 2 | 3,
       theme,
@@ -119,6 +121,33 @@ router.post("/generate", async (req, res) => {
       functionTag,
       headers,
     });
+
+    // 为每一页生成插画
+    const contentWithImages = await Promise.all(
+      generatedBook.content.map(async (page, index) => {
+        try {
+          // 如果有 image_prompt，则生成真实插画
+          if (page.image_prompt) {
+            const image = await generateBookIllustration({
+              prompt: page.image_prompt,
+              headers,
+            });
+            return {
+              ...page,
+              image_url: image.url,
+            };
+          }
+          return page;
+        } catch (error) {
+          console.error(`Failed to generate image for page ${index + 1}:`, error);
+          // 生成失败时使用备用图片
+          return {
+            ...page,
+            image_url: `https://picsum.photos/800/600?random=${Date.now()}-${index}`,
+          };
+        }
+      })
+    );
 
     // Save to database
     const client = getSupabaseClient();
@@ -130,7 +159,7 @@ router.post("/generate", async (req, res) => {
         theme: generatedBook.theme,
         interest_tag: generatedBook.interestTag,
         function_tag: generatedBook.functionTag,
-        content: generatedBook.content,
+        content: contentWithImages,
         interaction: generatedBook.interaction,
       })
       .select()
@@ -148,6 +177,100 @@ router.post("/generate", async (req, res) => {
   } catch (error) {
     console.error("Error in POST /books/generate:", error);
     res.status(500).json({ error: "Failed to generate book" });
+  }
+});
+
+/**
+ * POST /api/v1/books/tts
+ * 文字转语音接口
+ * Body: { text: string, language: "en" | "zh" }
+ */
+router.post("/tts", async (req, res) => {
+  try {
+    const { text, language = "en" } = req.body;
+
+    if (!text || typeof text !== "string") {
+      return res.status(400).json({ error: "Text is required." });
+    }
+
+    const headers = HeaderUtils.extractForwardHeaders(
+      req.headers as Record<string, string>
+    );
+
+    const audio = await synthesizeSpeech({
+      text,
+      language: language as "en" | "zh",
+      headers,
+    });
+
+    res.json({
+      audioUri: audio.audioUri,
+      audioSize: audio.audioSize,
+    });
+  } catch (error) {
+    console.error("Error in POST /books/tts:", error);
+    res.status(500).json({ error: "Failed to synthesize speech" });
+  }
+});
+
+/**
+ * POST /api/v1/books/:id/images
+ * 为绘本的所有页面生成插画
+ */
+router.post("/:id/images", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const client = getSupabaseClient();
+
+    // 获取绘本
+    const { data: book, error: fetchError } = await client
+      .from("books")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !book) {
+      return res.status(404).json({ error: "Book not found" });
+    }
+
+    const headers = HeaderUtils.extractForwardHeaders(
+      req.headers as Record<string, string>
+    );
+
+    // 为每一页生成插画
+    const content = book.content as any[];
+    const updatedContent = await Promise.all(
+      content.map(async (page, index) => {
+        if (page.image_prompt && !page.image_url) {
+          try {
+            const image = await generateBookIllustration({
+              prompt: page.image_prompt,
+              headers,
+            });
+            return { ...page, image_url: image.url };
+          } catch (error) {
+            console.error(`Failed to generate image for page ${index + 1}:`, error);
+            return page;
+          }
+        }
+        return page;
+      })
+    );
+
+    // 更新绘本
+    const { error: updateError } = await client
+      .from("books")
+      .update({ content: updatedContent })
+      .eq("id", id);
+
+    if (updateError) {
+      return res.status(500).json({ error: "Failed to update book images" });
+    }
+
+    res.json({ message: "Images generated successfully", content: updatedContent });
+  } catch (error) {
+    console.error("Error in POST /books/:id/images:", error);
+    res.status(500).json({ error: "Failed to generate images" });
   }
 });
 

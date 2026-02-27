@@ -111,13 +111,45 @@ export const createStyles = (theme: Theme) => {
       lineHeight: 28,
       textAlign: 'center',
     },
-    audioHint: {
+    // Audio controls
+    audioControls: {
+      flexDirection: 'row',
+      gap: Spacing.md,
+      marginBottom: Spacing.lg,
+    },
+    audioButton: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: '#F0F7F2',
       borderRadius: BorderRadius.lg,
       padding: Spacing.md,
+      borderWidth: 2,
+      borderColor: '#E8E8E8',
+    },
+    audioButtonActive: {
+      backgroundColor: '#4A7C59',
+      borderColor: '#4A7C59',
+    },
+    audioButtonIcon: {
+      fontSize: 20,
+      marginRight: Spacing.sm,
+    },
+    audioButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#4A7C59',
+    },
+    audioHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#FFF8DC',
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
       marginBottom: Spacing.lg,
+      borderLeftWidth: 3,
+      borderLeftColor: '#FFD700',
     },
     audioHintIcon: {
       fontSize: 20,
@@ -126,7 +158,7 @@ export const createStyles = (theme: Theme) => {
     audioHintText: {
       flex: 1,
       fontSize: 13,
-      color: '#4A7C59',
+      color: '#8B7355',
       lineHeight: 18,
     },
     spotlightSection: {

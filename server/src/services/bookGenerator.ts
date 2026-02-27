@@ -90,6 +90,18 @@ const themeSuggestions = {
   3: ["科学探索", "民间传说", "逻辑推理", "冒险故事", "自然现象"],
 };
 
+// 水彩画风插画描述指南
+const WATERCOLOR_ILLUSTRATION_GUIDE = `
+插画描述词要求（image_prompt）：
+- 用英文描述画面主体和场景
+- 重点描述：可爱的圆润角色、温暖的动作表情、柔和的环境背景
+- 避免描述技法词汇（如"水彩"、"手绘"），系统会自动添加
+- 示例：
+  * "A fluffy orange kitten sitting on soft green grass, looking curious with big round eyes, surrounded by tiny colorful flowers"
+  * "A cute little rabbit holding a golden magic leaf, standing in a dreamy forest with soft sunlight filtering through trees"
+  * "A happy child playing with a red ball in a cozy room, warm afternoon light, gentle smile"
+`;
+
 export async function generateBook(params: GenerateBookParams): Promise<GeneratedBook> {
   const { level, theme, interestTag, functionTag, headers } = params;
   const config = new Config();
@@ -108,6 +120,8 @@ export async function generateBook(params: GenerateBookParams): Promise<Generate
 3. 互动设计：每页识别3-5个关键视觉对象，提供名称、自然拼读(Phonics)和简单动画提示
 4. 语气：极其温暖、充满鼓励且带有奇幻色彩
 
+${WATERCOLOR_ILLUSTRATION_GUIDE}
+
 ${level === 3 ? "5. 分支叙事：在故事的关键节点提供两个简单的决策点，以增加可重复游玩性" : ""}`;
 
   const userPrompt = `请创作一本${levelConfig.name}的双语绘本。
@@ -120,7 +134,7 @@ ${functionTag ? `功能标签：${functionTag}` : ""}
 - 共${levelConfig.pageCount}页内容
 - 每页英文不超过${levelConfig.maxWords}个单词
 - 每页包含3-5个聚光灯词汇(spotlight)
-- 为每页生成一个适合儿童插画的image_prompt描述词（风格：Whimsical, soft, organic, hand-drawn feel, child-friendly）
+- 为每页生成一个image_prompt描述词（描述画面主体和场景，用英文）
 - 在interaction部分，Magic Buddy要以亲切的双语形式向孩子提问
 
 请严格按照以下JSON格式输出，不要添加任何其他文字：
@@ -136,10 +150,10 @@ ${functionTag ? `功能标签：${functionTag}` : ""}
       "page_num": 1,
       "text_en": "English text here.",
       "text_zh": "中文翻译在这里。",
-      "audio_hint": "给家长的朗读建议",
-      "image_prompt": "插画描述词（英文）",
+      "audio_hint": "给家长的朗读建议（中文）",
+      "image_prompt": "A cute fluffy orange kitten sitting on soft green grass, looking curious with big round eyes, tiny colorful flowers around",
       "spotlight": [
-        { "object": "Keyword", "phonics": "k-ey-w-or-d", "animation_effect": "bounce" }
+        { "object": "cat", "phonics": "c-a-t", "animation_effect": "bounce" }
       ]
     }
   ],
