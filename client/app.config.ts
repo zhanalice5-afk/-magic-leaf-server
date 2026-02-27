@@ -1,29 +1,46 @@
 import { ExpoConfig, ConfigContext } from 'expo/config';
 
-const appName = process.env.COZE_PROJECT_NAME || process.env.EXPO_PUBLIC_COZE_PROJECT_NAME || '应用';
+const appName = 'Magic Leaf 双语绘本';
 const projectId = process.env.COZE_PROJECT_ID || process.env.EXPO_PUBLIC_COZE_PROJECT_ID;
-const slugAppName = projectId ? `app${projectId}` : 'myapp';
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...config,
     "name": appName,
-    "slug": slugAppName,
+    "slug": "magic-leaf-bilingual-books",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "magic-leaf",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": projectId || "magic-leaf-app"
+      }
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.magicleaf.bilingualbooks",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Magic Leaf 需要访问麦克风以支持语音输入和录音功能",
+        "NSCameraUsageDescription": "Magic Leaf 需要访问相机以拍摄照片上传绘本",
+        "NSPhotoLibraryUsageDescription": "Magic Leaf 需要访问相册以上传或保存图片"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#4A7C59"
       },
-      "package": `com.anonymous.x${projectId || '0'}`
+      "package": "com.magicleaf.bilingualbooks",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -43,29 +60,28 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#FFF8E7"
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": `允许魔法叶子双语绘本App访问您的相册，以便您上传或保存图片。`,
-          "cameraPermission": `允许魔法叶子双语绘本App使用您的相机，以便您直接拍摄照片上传。`,
-          "microphonePermission": `允许魔法叶子双语绘本App访问您的麦克风，以便您拍摄带有声音的视频。`
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": `魔法叶子双语绘本App需要访问您的位置以提供周边服务及导航功能。`
+          "photosPermission": "Magic Leaf 需要访问您的相册，以便您上传或保存绘本图片",
+          "cameraPermission": "Magic Leaf 需要使用相机，以便您拍摄照片上传绘本"
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": `魔法叶子双语绘本App需要访问相机以拍摄照片和视频。`,
-          "microphonePermission": `魔法叶子双语绘本App需要访问麦克风以录制视频声音。`,
+          "cameraPermission": "Magic Leaf 需要访问相机以拍摄照片和视频",
+          "microphonePermission": "Magic Leaf 需要访问麦克风以录制语音",
           "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Magic Leaf 需要访问麦克风以支持语音输入和录音功能"
         }
       ]
     ],
