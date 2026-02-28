@@ -79,9 +79,8 @@ export default function RootLayout() {
   // 处理关闭弹窗
   const handleCloseModal = useCallback(() => {
     setShowWarning(false);
-    if (!timeLimitService.isTimeExceeded()) {
-      setShowExceeded(false);
-    }
+    // 允许关闭弹窗，但显示半透明遮罩提示用户
+    setShowExceeded(false);
   }, []);
 
   // 计时器点击事件
