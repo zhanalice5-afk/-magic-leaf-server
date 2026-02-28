@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Audio } from 'expo-av';
+import Toast from 'react-native-toast-message';
 import { Screen } from '@/components/Screen';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
@@ -428,6 +429,17 @@ export default function HomeScreen() {
     if (!selectedTheme) return;
 
     setIsLoading(true);
+    
+    // 显示生成提示（飞跃版需要更长时间）
+    if (selectedLevel === 3) {
+      Toast.show({
+        type: 'info',
+        text1: '🚀 飞跃版生成中...',
+        text2: '完整故事需要约 1-2 分钟，请耐心等待',
+        visibilityTime: 3000,
+      });
+    }
+    
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/v1/books/generate`, {
         method: 'POST',
@@ -445,6 +457,11 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error('Failed to generate book:', error);
+      Toast.show({
+        type: 'error',
+        text1: '生成失败',
+        text2: '请稍后重试',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -544,8 +561,24 @@ export default function HomeScreen() {
           disabled={!isGenerateEnabled || isLoading}
           activeOpacity={0.8}
         >
-          {isLoading ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Text style={styles.generateButtonText}>✨ 生成魔法绘本</Text>}
+          {isLoading ? (
+            <View style={styles.buttonLoadingContainer}>
+              <ActivityIndicator color="#FFFFFF" size="small" />
+              <Text style={styles.buttonLoadingText}>
+                {selectedLevel === 3 ? '正在创作完整故事...' : '正在生成绘本...'}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.generateButtonText}>✨ 生成魔法绘本</Text>
+          )}
         </TouchableOpacity>
+        
+        {/* 生成时间提示 */}
+        {isLoading && selectedLevel === 3 && (
+          <Text style={styles.waitHint}>
+            💡 飞跃版需要更长时间创作，请耐心等待约 1-2 分钟
+          </Text>
+        )}
 
         {/* Recent Books */}
         <View style={styles.booksSection}>

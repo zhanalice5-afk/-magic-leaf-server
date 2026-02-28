@@ -1,13 +1,17 @@
 /**
  * 限时保护服务
  * 用于保护小朋友眼睛，限制使用时间
+ * 支持儿童模式和成人模式切换
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'magic_leaf_time_limit';
-const TIME_LIMIT_MINUTES = 20; // 每次使用限时 20 分钟
+const MODE_KEY = 'magic_leaf_mode';
+const TIME_LIMIT_MINUTES = 20; // 儿童模式每次使用限时 20 分钟
 const TIME_LIMIT_MS = TIME_LIMIT_MINUTES * 60 * 1000;
+
+export type AppMode = 'child' | 'adult';
 
 export interface TimeLimitData {
   startTime: number; // 开始时间戳
@@ -22,7 +26,9 @@ export interface TimeLimitData {
 export class TimeLimitService {
   private static instance: TimeLimitService;
   private data: TimeLimitData | null = null;
+  private mode: AppMode = 'child'; // 默认儿童模式
   private listeners: Set<(remainingTime: number, isExceeded: boolean) => void> = new Set();
+  private modeListeners: Set<(mode: AppMode) => void> = new Set();
   private checkInterval: NodeJS.Timeout | null = null;
   private warningCallback: (() => void) | null = null;
   private exceededCallback: (() => void) | null = null;
@@ -36,10 +42,15 @@ export class TimeLimitService {
 
   /**
    * 初始化服务
-   * 检查是否有之前的记录，如果没有则创建新的
    */
   async initialize(): Promise<void> {
     try {
+      // 加载模式设置
+      const storedMode = await AsyncStorage.getItem(MODE_KEY);
+      if (storedMode === 'child' || storedMode === 'adult') {
+        this.mode = storedMode;
+      }
+      
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       
       if (stored) {
@@ -52,12 +63,10 @@ export class TimeLimitService {
         const currentDate = new Date(now).toDateString();
         
         if (lastDate !== currentDate) {
-          // 新的一天，重置计时
           await this.reset();
         } else {
           // 同一天，更新最后活跃时间并累加时间
           const elapsedSinceLastActive = now - this.data.lastActiveTime;
-          // 如果间隔超过 5 分钟，认为是新的使用会话，不累加
           if (elapsedSinceLastActive < 5 * 60 * 1000) {
             this.data.totalUsedTime += elapsedSinceLastActive;
           }
@@ -65,17 +74,62 @@ export class TimeLimitService {
           await this.save();
         }
       } else {
-        // 没有记录，创建新的
         await this.reset();
       }
       
-      // 启动定时检查
-      this.startPeriodicCheck();
+      // 只有儿童模式才启动定时检查
+      if (this.mode === 'child') {
+        this.startPeriodicCheck();
+      }
     } catch (error) {
       console.error('TimeLimitService initialize error:', error);
-      // 出错时重置
       await this.reset();
     }
+  }
+
+  /**
+   * 获取当前模式
+   */
+  getMode(): AppMode {
+    return this.mode;
+  }
+
+  /**
+   * 设置模式
+   */
+  async setMode(newMode: AppMode): Promise<void> {
+    if (this.mode === newMode) return;
+    
+    this.mode = newMode;
+    await AsyncStorage.setItem(MODE_KEY, newMode);
+    
+    // 通知模式变化
+    this.modeListeners.forEach(callback => callback(newMode));
+    
+    if (newMode === 'adult') {
+      // 成人模式：停止计时
+      this.stopPeriodicCheck();
+      this.notifyListeners();
+    } else {
+      // 儿童模式：重新开始计时
+      await this.reset();
+      this.startPeriodicCheck();
+    }
+  }
+
+  /**
+   * 是否启用限时（儿童模式）
+   */
+  isTimeLimitEnabled(): boolean {
+    return this.mode === 'child';
+  }
+
+  /**
+   * 添加模式变化监听器
+   */
+  addModeListener(callback: (mode: AppMode) => void): () => void {
+    this.modeListeners.add(callback);
+    return () => this.modeListeners.delete(callback);
   }
 
   /**
@@ -109,12 +163,13 @@ export class TimeLimitService {
    * 更新活跃时间
    */
   async updateActivity(): Promise<void> {
+    // 成人模式不计时
+    if (this.mode === 'adult') return;
     if (!this.data) return;
     
     const now = Date.now();
     const elapsed = now - this.data.lastActiveTime;
     
-    // 只累加 5 分钟内的间隔
     if (elapsed < 5 * 60 * 1000) {
       this.data.totalUsedTime += elapsed;
     }
@@ -128,6 +183,8 @@ export class TimeLimitService {
    * 获取剩余时间（毫秒）
    */
   getRemainingTime(): number {
+    // 成人模式无限制
+    if (this.mode === 'adult') return Infinity;
     if (!this.data) return TIME_LIMIT_MS;
     return Math.max(0, TIME_LIMIT_MS - this.data.totalUsedTime);
   }
@@ -152,6 +209,7 @@ export class TimeLimitService {
    * 获取剩余时间（格式化字符串）
    */
   getRemainingTimeString(): string {
+    if (this.mode === 'adult') return '无限制';
     const remaining = this.getRemainingTime();
     const minutes = Math.floor(remaining / 60000);
     const seconds = Math.floor((remaining % 60000) / 1000);
@@ -162,6 +220,8 @@ export class TimeLimitService {
    * 是否已超时
    */
   isTimeExceeded(): boolean {
+    // 成人模式永不超时
+    if (this.mode === 'adult') return false;
     return this.getRemainingTime() <= 0;
   }
 
@@ -169,6 +229,7 @@ export class TimeLimitService {
    * 是否应该显示警告（剩余 5 分钟时）
    */
   shouldShowWarning(): boolean {
+    if (this.mode === 'adult') return false;
     if (!this.data || this.data.warningShown) return false;
     const remaining = this.getRemainingTime();
     return remaining > 0 && remaining <= 5 * 60 * 1000;
@@ -186,12 +247,10 @@ export class TimeLimitService {
 
   /**
    * 家长验证通过后延长使用时间
-   * @param extraMinutes 额外的分钟数
    */
   async extendTime(extraMinutes: number = 10): Promise<void> {
     if (!this.data) return;
     
-    // 减少已使用时间（相当于增加剩余时间）
     this.data.totalUsedTime -= extraMinutes * 60 * 1000;
     if (this.data.totalUsedTime < 0) {
       this.data.totalUsedTime = 0;
@@ -237,17 +296,15 @@ export class TimeLimitService {
    * 启动定时检查
    */
   private startPeriodicCheck(): void {
-    // 每 1 秒检查一次
+    this.stopPeriodicCheck();
     this.checkInterval = setInterval(() => {
       this.updateActivity();
       
-      // 检查是否需要显示警告
       if (this.shouldShowWarning() && this.warningCallback) {
         this.warningCallback();
         this.markWarningShown();
       }
       
-      // 检查是否超时
       if (this.isTimeExceeded() && this.exceededCallback) {
         this.exceededCallback();
       }
@@ -272,8 +329,8 @@ export class TimeLimitService {
   getConfig() {
     return {
       timeLimitMinutes: TIME_LIMIT_MINUTES,
-      warningThresholdMinutes: 5, // 剩余 5 分钟时警告
-      extendMinutes: 10, // 家长验证后延长 10 分钟
+      warningThresholdMinutes: 5,
+      extendMinutes: 10,
     };
   }
 }

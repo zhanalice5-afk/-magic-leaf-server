@@ -18,6 +18,7 @@ export default function RootLayout() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [showExceeded, setShowExceeded] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [remainingTime, setRemainingTime] = useState(20 * 60 * 1000);
 
   // 初始化限时服务
@@ -29,8 +30,8 @@ export default function RootLayout() {
       // 设置当前剩余时间
       setRemainingTime(timeLimitService.getRemainingTime());
       
-      // 如果已经超时，直接显示超时弹窗
-      if (timeLimitService.isTimeExceeded()) {
+      // 如果已经超时且是儿童模式，显示超时弹窗
+      if (timeLimitService.isTimeExceeded() && timeLimitService.getMode() === 'child') {
         setShowExceeded(true);
       }
     };
@@ -39,12 +40,16 @@ export default function RootLayout() {
     
     // 设置警告回调
     timeLimitService.setWarningCallback(() => {
-      setShowWarning(true);
+      if (timeLimitService.getMode() === 'child') {
+        setShowWarning(true);
+      }
     });
     
     // 设置超时回调
     timeLimitService.setExceededCallback(() => {
-      setShowExceeded(true);
+      if (timeLimitService.getMode() === 'child') {
+        setShowExceeded(true);
+      }
     });
     
     // 监听时间变化
@@ -79,16 +84,28 @@ export default function RootLayout() {
   // 处理关闭弹窗
   const handleCloseModal = useCallback(() => {
     setShowWarning(false);
-    // 允许关闭弹窗，但显示半透明遮罩提示用户
     setShowExceeded(false);
+    setShowSettings(false);
   }, []);
 
   // 计时器点击事件
   const handleTimerPress = useCallback(() => {
+    const mode = timeLimitService.getMode();
+    
+    // 成人模式直接打开设置
+    if (mode === 'adult') {
+      setShowSettings(true);
+      return;
+    }
+    
+    // 儿童模式
     if (timeLimitService.isTimeExceeded()) {
       setShowExceeded(true);
     } else if (timeLimitService.getRemainingTime() <= 5 * 60 * 1000) {
       setShowWarning(true);
+    } else {
+      // 点击计时器打开设置
+      setShowSettings(true);
     }
   }, []);
 
@@ -113,9 +130,18 @@ export default function RootLayout() {
               {/* 限时计时器 */}
               <TimeLimitTimer onPress={handleTimerPress} />
               
+              {/* 设置弹窗 */}
+              <TimeLimitModal
+                visible={showSettings}
+                type="settings"
+                remainingTime={remainingTime}
+                onClose={handleCloseModal}
+                onExtend={handleExtendTime}
+              />
+              
               {/* 警告弹窗 */}
               <TimeLimitModal
-                visible={showWarning && !showExceeded}
+                visible={showWarning && !showExceeded && !showSettings}
                 type="warning"
                 remainingTime={remainingTime}
                 onClose={handleCloseModal}
@@ -124,7 +150,7 @@ export default function RootLayout() {
               
               {/* 超时弹窗 */}
               <TimeLimitModal
-                visible={showExceeded}
+                visible={showExceeded && !showSettings}
                 type="exceeded"
                 remainingTime={0}
                 onClose={handleCloseModal}

@@ -1,6 +1,7 @@
 /**
  * 限时保护弹窗组件
  * 用于提醒小朋友休息和保护眼睛
+ * 支持儿童/成人模式切换
  */
 
 import React, { useState, useMemo } from 'react';
@@ -16,14 +17,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
-import { timeLimitService } from '@/src/services/timeLimitService';
+import { timeLimitService, AppMode } from '@/src/services/timeLimitService';
 import { Spacing, BorderRadius } from '@/constants/theme';
 
 const { width } = Dimensions.get('window');
 
 interface TimeLimitModalProps {
   visible: boolean;
-  type: 'warning' | 'exceeded';
+  type: 'warning' | 'exceeded' | 'settings';
   remainingTime: number;
   onClose: () => void;
   onExtend: () => void;
@@ -41,6 +42,7 @@ export function TimeLimitModal({
   const [showParentVerify, setShowParentVerify] = useState(false);
   const [verifyInput, setVerifyInput] = useState('');
   const [verifyError, setVerifyError] = useState('');
+  const [appMode, setAppMode] = useState<AppMode>(timeLimitService.getMode());
   
   // 简单的数学验证题（家长验证）
   const [mathProblem] = useState(() => {
@@ -64,6 +66,11 @@ export function TimeLimitModal({
     }
   };
 
+  const handleModeSwitch = (mode: AppMode) => {
+    timeLimitService.setMode(mode);
+    setAppMode(mode);
+  };
+
   const formatTime = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);
@@ -81,43 +88,93 @@ export function TimeLimitModal({
     >
       <View style={styles.overlay}>
         <View style={[styles.container, { paddingBottom: insets.bottom + Spacing.lg }]}>
+          {/* 模式切换 */}
+          <View style={styles.modeSwitchContainer}>
+            <Text style={styles.modeLabel}>使用模式</Text>
+            <View style={styles.modeSwitch}>
+              <TouchableOpacity
+                style={[
+                  styles.modeButton,
+                  appMode === 'child' && styles.modeButtonActive,
+                ]}
+                onPress={() => handleModeSwitch('child')}
+              >
+                <Text style={styles.modeIcon}>🧒</Text>
+                <Text style={[
+                  styles.modeButtonText,
+                  appMode === 'child' && styles.modeButtonTextActive,
+                ]}>
+                  儿童模式
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modeButton,
+                  appMode === 'adult' && styles.modeButtonActive,
+                ]}
+                onPress={() => handleModeSwitch('adult')}
+              >
+                <Text style={styles.modeIcon}>👤</Text>
+                <Text style={[
+                  styles.modeButtonText,
+                  appMode === 'adult' && styles.modeButtonTextActive,
+                ]}>
+                  成人模式
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modeHint}>
+              {appMode === 'child' 
+                ? '儿童模式：每次限制 20 分钟' 
+                : '成人模式：无时间限制'}
+            </Text>
+          </View>
+
           {/* 图标 */}
           <View style={styles.iconContainer}>
             <Text style={styles.icon}>
-              {type === 'warning' ? '⏰' : '😴'}
+              {type === 'warning' ? '⏰' : type === 'exceeded' ? '😴' : '⚙️'}
             </Text>
           </View>
 
           {/* 标题 */}
           <Text style={styles.title}>
-            {type === 'warning' ? '休息提醒' : '时间到啦'}
+            {type === 'warning' ? '休息提醒' : type === 'exceeded' ? '时间到啦' : '时间设置'}
           </Text>
 
           {/* 内容 */}
-          <Text style={styles.message}>
-            {type === 'warning' 
-              ? `还剩 ${formatTime(remainingTime)} 就要休息啦\n\n小朋友，让眼睛休息一下吧~`
-              : '你已经使用了 20 分钟啦！\n\n眼睛需要休息一下，去看看远处吧~'
-            }
-          </Text>
-
-          {/* 进度条 */}
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { 
-                    width: `${Math.max(0, (remainingTime / (20 * 60 * 1000)) * 100)}%`,
-                    backgroundColor: type === 'warning' ? '#FFA500' : '#FF6B6B',
-                  }
-                ]} 
-              />
-            </View>
-            <Text style={styles.progressText}>
-              {type === 'warning' ? `剩余: ${formatTime(remainingTime)}` : '时间已用完'}
+          {appMode === 'adult' ? (
+            <Text style={styles.message}>
+              当前为成人模式，无时间限制{'\n\n'}可以自由使用绘本功能
             </Text>
-          </View>
+          ) : (
+            <Text style={styles.message}>
+              {type === 'warning' 
+                ? `还剩 ${formatTime(remainingTime)} 就要休息啦\n\n小朋友，让眼睛休息一下吧~`
+                : '你已经使用了 20 分钟啦！\n\n眼睛需要休息一下，去看看远处吧~'
+              }
+            </Text>
+          )}
+
+          {/* 进度条 - 仅儿童模式显示 */}
+          {appMode === 'child' && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill, 
+                    { 
+                      width: `${Math.max(0, (remainingTime / (20 * 60 * 1000)) * 100)}%`,
+                      backgroundColor: type === 'warning' ? '#FFA500' : '#FF6B6B',
+                    }
+                  ]} 
+                />
+              </View>
+              <Text style={styles.progressText}>
+                {type === 'warning' ? `剩余: ${formatTime(remainingTime)}` : '时间已用完'}
+              </Text>
+            </View>
+          )}
 
           {/* 按钮区域 */}
           {!showParentVerify ? (
@@ -127,18 +184,20 @@ export function TimeLimitModal({
                 onPress={onClose}
               >
                 <Text style={styles.primaryButtonText}>
-                  {type === 'warning' ? '我知道了' : '去休息'}
+                  {appMode === 'adult' ? '确定' : type === 'warning' ? '我知道了' : '去休息'}
                 </Text>
               </TouchableOpacity>
               
-              <TouchableOpacity 
-                style={[styles.button, styles.secondaryButton]} 
-                onPress={() => setShowParentVerify(true)}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  家长延长使用
-                </Text>
-              </TouchableOpacity>
+              {appMode === 'child' && (
+                <TouchableOpacity 
+                  style={[styles.button, styles.secondaryButton]} 
+                  onPress={() => setShowParentVerify(true)}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    家长延长使用
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <View style={styles.verifyContainer}>
@@ -199,44 +258,88 @@ export function TimeLimitModal({
   );
 }
 
-function createModalStyles(theme: any) {
-  return StyleSheet.create({
+const createModalStyles = (theme: any) =>
+  StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.6)',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: Spacing.lg,
     },
     container: {
+      width: width * 0.85,
       backgroundColor: '#FFFFFF',
       borderRadius: BorderRadius.xl,
       padding: Spacing.xl,
-      width: '100%',
-      maxWidth: 400,
       alignItems: 'center',
     },
-    iconContainer: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: '#FFF8E7',
-      justifyContent: 'center',
-      alignItems: 'center',
+    modeSwitchContainer: {
+      width: '100%',
       marginBottom: Spacing.lg,
     },
+    modeLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#666',
+      marginBottom: Spacing.sm,
+      textAlign: 'center',
+    },
+    modeSwitch: {
+      flexDirection: 'row',
+      backgroundColor: '#F5F5F5',
+      borderRadius: BorderRadius.lg,
+      padding: 4,
+    },
+    modeButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: Spacing.sm,
+      borderRadius: BorderRadius.md,
+    },
+    modeButtonActive: {
+      backgroundColor: '#FFFFFF',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    modeIcon: {
+      fontSize: 16,
+      marginRight: 6,
+    },
+    modeButtonText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: '#666',
+    },
+    modeButtonTextActive: {
+      color: '#4A7C59',
+      fontWeight: '600',
+    },
+    modeHint: {
+      fontSize: 12,
+      color: '#999',
+      textAlign: 'center',
+      marginTop: Spacing.xs,
+    },
+    iconContainer: {
+      marginBottom: Spacing.md,
+    },
     icon: {
-      fontSize: 40,
+      fontSize: 48,
     },
     title: {
       fontSize: 24,
       fontWeight: '700',
-      color: '#2D4A35',
+      color: '#333',
       marginBottom: Spacing.md,
     },
     message: {
       fontSize: 16,
-      color: '#5A6B5C',
+      color: '#666',
       textAlign: 'center',
       lineHeight: 24,
       marginBottom: Spacing.lg,
@@ -246,36 +349,33 @@ function createModalStyles(theme: any) {
       marginBottom: Spacing.lg,
     },
     progressBar: {
-      height: 12,
+      height: 8,
       backgroundColor: '#E8E8E8',
-      borderRadius: 6,
+      borderRadius: 4,
       overflow: 'hidden',
-      marginBottom: Spacing.sm,
     },
     progressFill: {
       height: '100%',
-      borderRadius: 6,
+      borderRadius: 4,
     },
     progressText: {
-      fontSize: 14,
-      color: '#6B7B6D',
+      fontSize: 12,
+      color: '#999',
       textAlign: 'center',
-      fontWeight: '500',
+      marginTop: Spacing.xs,
     },
     buttonContainer: {
       width: '100%',
       gap: Spacing.sm,
     },
     button: {
+      width: '100%',
       paddingVertical: Spacing.md,
-      paddingHorizontal: Spacing.xl,
       borderRadius: BorderRadius.lg,
       alignItems: 'center',
-      minWidth: 120,
     },
     primaryButton: {
       backgroundColor: '#4A7C59',
-      flex: 1,
     },
     primaryButtonText: {
       color: '#FFFFFF',
@@ -283,13 +383,12 @@ function createModalStyles(theme: any) {
       fontWeight: '600',
     },
     secondaryButton: {
-      backgroundColor: '#F0F7F2',
-      flex: 1,
+      backgroundColor: '#F5F5F5',
     },
     secondaryButtonText: {
-      color: '#4A7C59',
+      color: '#666',
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight: '500',
     },
     verifyContainer: {
       width: '100%',
@@ -298,7 +397,7 @@ function createModalStyles(theme: any) {
     verifyTitle: {
       fontSize: 18,
       fontWeight: '600',
-      color: '#2D4A35',
+      color: '#333',
       marginBottom: Spacing.md,
     },
     verifyQuestion: {
@@ -310,12 +409,12 @@ function createModalStyles(theme: any) {
     verifyInput: {
       width: '100%',
       height: 50,
-      borderWidth: 2,
-      borderColor: '#E8E8E8',
+      backgroundColor: '#F5F5F5',
       borderRadius: BorderRadius.lg,
-      fontSize: 20,
       textAlign: 'center',
-      color: '#2D4A35',
+      fontSize: 24,
+      fontWeight: '600',
+      color: '#333',
       marginBottom: Spacing.sm,
     },
     verifyError: {
@@ -344,8 +443,7 @@ function createModalStyles(theme: any) {
     tipText: {
       flex: 1,
       fontSize: 12,
-      color: '#8B6914',
+      color: '#996600',
       lineHeight: 18,
     },
   });
-}

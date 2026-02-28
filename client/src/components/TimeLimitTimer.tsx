@@ -1,6 +1,7 @@
 /**
  * 限时保护计时器组件
  * 显示在界面顶部，方便查看剩余时间
+ * 支持儿童/成人模式切换
  */
 
 import React, { useState, useEffect } from 'react';
@@ -12,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
-import { timeLimitService } from '@/src/services/timeLimitService';
+import { timeLimitService, AppMode } from '@/src/services/timeLimitService';
 import { Spacing, BorderRadius } from '@/constants/theme';
 
 interface TimeLimitTimerProps {
@@ -24,14 +25,24 @@ export function TimeLimitTimer({ onPress }: TimeLimitTimerProps) {
   const insets = useSafeAreaInsets();
   const [remainingTime, setRemainingTime] = useState(timeLimitService.getRemainingTime());
   const [isExceeded, setIsExceeded] = useState(timeLimitService.isTimeExceeded());
+  const [appMode, setAppMode] = useState<AppMode>(timeLimitService.getMode());
 
   useEffect(() => {
-    const unsubscribe = timeLimitService.addListener((remaining, exceeded) => {
+    // 监听时间变化
+    const unsubscribeTime = timeLimitService.addListener((remaining, exceeded) => {
       setRemainingTime(remaining);
       setIsExceeded(exceeded);
     });
+    
+    // 监听模式变化
+    const unsubscribeMode = timeLimitService.addModeListener((mode) => {
+      setAppMode(mode);
+    });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeTime();
+      unsubscribeMode();
+    };
   }, []);
 
   const formatTime = (ms: number) => {
@@ -46,6 +57,7 @@ export function TimeLimitTimer({ onPress }: TimeLimitTimerProps) {
   };
 
   const getStatusColor = () => {
+    if (appMode === 'adult') return '#8B5CF6'; // 紫色表示成人模式
     if (isExceeded) return '#FF6B6B';
     if (remainingTime <= 5 * 60 * 1000) return '#FFA500'; // 5 分钟内
     return '#4A7C59';
@@ -53,6 +65,29 @@ export function TimeLimitTimer({ onPress }: TimeLimitTimerProps) {
 
   const statusColor = getStatusColor();
 
+  // 成人模式显示
+  if (appMode === 'adult') {
+    return (
+      <TouchableOpacity 
+        style={[styles.container, { top: insets.top + 8 }]}
+        onPress={onPress}
+        activeOpacity={0.8}
+      >
+        <View style={styles.iconContainer}>
+          <Text style={styles.icon}>👤</Text>
+        </View>
+        
+        <View style={styles.timeContainer}>
+          <Text style={[styles.timeText, { color: statusColor }]}>
+            成人模式
+          </Text>
+          <Text style={styles.modeHint}>无限制</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  // 儿童模式显示
   return (
     <TouchableOpacity 
       style={[styles.container, { top: insets.top + 8 }]}
@@ -60,7 +95,7 @@ export function TimeLimitTimer({ onPress }: TimeLimitTimerProps) {
       activeOpacity={0.8}
     >
       <View style={styles.iconContainer}>
-        <Text style={styles.icon}>⏱️</Text>
+        <Text style={styles.icon}>🧒</Text>
       </View>
       
       <View style={styles.timeContainer}>
@@ -113,6 +148,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  modeHint: {
+    fontSize: 10,
+    color: '#8B5CF6',
+    textAlign: 'center',
+    marginTop: 2,
   },
   progressBar: {
     height: 3,

@@ -336,12 +336,28 @@ export default function ReadScreen() {
   const audioRecorderRef = useRef<CrossPlatformAudioRecorder | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   
-  // 滑动手势状态
+  // 使用 ref 存储最新值，避免 PanResponder 闭包问题
+  const bookRef = useRef(book);
+  const currentPageRef = useRef(currentPage);
+  useEffect(() => {
+    bookRef.current = book;
+    currentPageRef.current = currentPage;
+  }, [book, currentPage]);
+  
+  // 滑动手势状态 - 使用更激进的手势捕获策略
   const translateX = useRef(new Animated.Value(0)).current;
   const panResponder = useRef(
     PanResponder.create({
+      // 在手势开始时就尝试捕获，确保水平滑动不被 ScrollView 拦截
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: (_, gestureState) => {
+        // 水平滑动时捕获
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 5;
+      },
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        // 水平滑动超过 10px 时响应
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
         return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
       },
       onPanResponderMove: (_, gestureState) => {
@@ -354,14 +370,18 @@ export default function ReadScreen() {
         const threshold = width * 0.2; // 滑动超过 20% 宽度触发翻页
         const velocityThreshold = 0.5; // 速度阈值
         
+        // 使用 ref 获取最新值
+        const currentBook = bookRef.current;
+        const currentPg = currentPageRef.current;
+        
         // 左滑（下一页）
-        if ((dx < -threshold || vx < -velocityThreshold) && book && currentPage < book.content.length - 1) {
+        if ((dx < -threshold || vx < -velocityThreshold) && currentBook && currentPg < currentBook.content.length - 1) {
           Animated.timing(translateX, {
             toValue: -width,
             duration: 200,
             useNativeDriver: true,
           }).start(() => {
-            setCurrentPage(currentPage + 1);
+            setCurrentPage(currentPg + 1);
             translateX.setValue(width);
             Animated.timing(translateX, {
               toValue: 0,
@@ -371,13 +391,13 @@ export default function ReadScreen() {
           });
         }
         // 右滑（上一页）
-        else if ((dx > threshold || vx > velocityThreshold) && currentPage > 0) {
+        else if ((dx > threshold || vx > velocityThreshold) && currentPg > 0) {
           Animated.timing(translateX, {
             toValue: width,
             duration: 200,
             useNativeDriver: true,
           }).start(() => {
-            setCurrentPage(currentPage - 1);
+            setCurrentPage(currentPg - 1);
             translateX.setValue(-width);
             Animated.timing(translateX, {
               toValue: 0,

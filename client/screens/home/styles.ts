@@ -166,6 +166,23 @@ export const createStyles = (theme: Theme) => {
       fontWeight: '700',
       color: '#FFFFFF',
     },
+    buttonLoadingContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+    },
+    buttonLoadingText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    waitHint: {
+      fontSize: 13,
+      color: '#666',
+      textAlign: 'center',
+      marginBottom: Spacing.lg,
+      lineHeight: 20,
+    },
     booksSection: {
       marginTop: Spacing.lg,
     },
