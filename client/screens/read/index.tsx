@@ -21,6 +21,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { createStyles } from './styles';
 import { Spacing } from '@/constants/theme';
+import { getApiBaseUrl } from '@/src/config/api';
 
 const { width, height } = Dimensions.get('window');
 const isSmallScreen = width < 600;
@@ -323,6 +324,8 @@ export default function ReadScreen() {
   const [sentenceAudioState, setSentenceAudioState] = useState<{ en: AudioState; zh: AudioState }>({ en: 'idle', zh: 'idle' });
   const [wordAudioState, setWordAudioState] = useState<string | null>(null);
   const [activeWord, setActiveWord] = useState<string | null>(null);
+  // Question audio state - 问题朗读状态
+  const [questionAudioState, setQuestionAudioState] = useState<{ en: AudioState; zh: AudioState }>({ en: 'idle', zh: 'idle' });
   
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -411,6 +414,7 @@ export default function ReadScreen() {
     setSentenceAudioState({ en: 'idle', zh: 'idle' });
     setWordAudioState(null);
     setActiveWord(null);
+    setQuestionAudioState({ en: 'idle', zh: 'idle' });
     setRecordingResult(null);
   }, [currentPage]);
 
@@ -429,7 +433,7 @@ export default function ReadScreen() {
     const fetchBook = async () => {
       try {
         const response = await fetch(
-          `${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/${bookId}`
+          `${getApiBaseUrl()}/api/v1/books/${bookId}`
         );
         const data = await response.json();
 
@@ -471,7 +475,7 @@ export default function ReadScreen() {
     }
 
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/tts`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, language }),
@@ -509,7 +513,7 @@ export default function ReadScreen() {
 
     try {
       // 使用后端 TTS 接口发音单词
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/tts`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: word, language: 'en' }),
@@ -529,6 +533,49 @@ export default function ReadScreen() {
       setWordAudioState(null);
     }
   }, [wordAudioState]);
+
+  // Play question audio - 朗读互动问题
+  const handlePlayQuestion = useCallback(async (language: 'en' | 'zh') => {
+    if (!book) return;
+    
+    const pageData = book.content[currentPage];
+    if (!pageData.question) return;
+    
+    const text = language === 'en' ? pageData.question.question_en : pageData.question.question_zh;
+
+    // 如果正在播放同一种语言，停止播放
+    if (questionAudioState[language] === 'playing') {
+      await stopAllAudio();
+      setQuestionAudioState(prev => ({ ...prev, [language]: 'idle' }));
+      return;
+    }
+
+    // 停止当前播放
+    await stopAllAudio();
+    setQuestionAudioState({ en: language === 'en' ? 'loading' : 'idle', zh: language === 'zh' ? 'loading' : 'idle' });
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language }),
+      });
+
+      const data = await response.json();
+
+      if (data.audioUri) {
+        await audioPlayerRef.current?.play(data.audioUri, () => {
+          setQuestionAudioState({ en: 'idle', zh: 'idle' });
+        });
+        setQuestionAudioState(prev => ({ ...prev, [language]: 'playing' }));
+      } else {
+        setQuestionAudioState({ en: 'idle', zh: 'idle' });
+      }
+    } catch (err) {
+      console.error('Failed to play question audio:', err);
+      setQuestionAudioState({ en: 'idle', zh: 'idle' });
+    }
+  }, [book, currentPage, questionAudioState]);
 
   // Recording functions
   const startRecording = async () => {
@@ -575,7 +622,7 @@ export default function ReadScreen() {
       
       if (result && result.base64) {
         // 调用 ASR 接口进行语音识别
-        const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/asr`, {
+        const response = await fetch(`${getApiBaseUrl()}/api/v1/asr`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -661,7 +708,7 @@ export default function ReadScreen() {
             setIsLoading(true);
             setError(null);
             if (bookId) {
-              fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/${bookId}`)
+              fetch(`${getApiBaseUrl()}/api/v1/books/${bookId}`)
                 .then(res => res.json())
                 .then(data => {
                   if (data.book) setBook(data.book);
@@ -820,8 +867,40 @@ export default function ReadScreen() {
                 <Text style={styles.questionLabel}>互动时刻</Text>
               </View>
               <View style={styles.questionCard}>
-                <Text style={styles.questionTextEn}>{currentPageData.question.question_en}</Text>
-                <Text style={styles.questionTextZh}>{currentPageData.question.question_zh}</Text>
+                {/* English Question with Audio Button */}
+                <View style={styles.questionTextRow}>
+                  <Text style={styles.questionTextEn}>{currentPageData.question.question_en}</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.questionSpeakButton,
+                      questionAudioState.en === 'playing' && styles.questionSpeakButtonActive,
+                    ]}
+                    onPress={() => handlePlayQuestion('en')}
+                    disabled={questionAudioState.en === 'loading'}
+                  >
+                    <Text style={styles.questionSpeakIcon}>
+                      {questionAudioState.en === 'loading' ? '⏳' : questionAudioState.en === 'playing' ? '⏸' : '🔊'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Chinese Question with Audio Button */}
+                <View style={styles.questionTextRow}>
+                  <Text style={styles.questionTextZh}>{currentPageData.question.question_zh}</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.questionSpeakButton,
+                      questionAudioState.zh === 'playing' && styles.questionSpeakButtonActive,
+                    ]}
+                    onPress={() => handlePlayQuestion('zh')}
+                    disabled={questionAudioState.zh === 'loading'}
+                  >
+                    <Text style={styles.questionSpeakIcon}>
+                      {questionAudioState.zh === 'loading' ? '⏳' : questionAudioState.zh === 'playing' ? '⏸' : '🔊'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
                 {currentPageData.question.hint && (
                   <View style={styles.questionHintBox}>
                     <Text style={styles.questionHintIcon}>💡</Text>

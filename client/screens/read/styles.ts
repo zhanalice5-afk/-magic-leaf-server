@@ -461,11 +461,36 @@ export const createStyles = (theme: Theme) => {
       color: '#2D4A35',
       marginBottom: Spacing.xs,
       lineHeight: 24,
+      flex: 1,
     },
     questionTextZh: {
       fontSize: 15,
       color: '#5A6B5C',
       lineHeight: 22,
+      flex: 1,
+    },
+    questionTextRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      marginBottom: Spacing.xs,
+    },
+    questionSpeakButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: '#F0F7F2',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginLeft: Spacing.sm,
+      borderWidth: 1,
+      borderColor: '#4A7C59',
+    },
+    questionSpeakButtonActive: {
+      backgroundColor: '#4A7C59',
+    },
+    questionSpeakIcon: {
+      fontSize: 16,
     },
     questionHintBox: {
       flexDirection: 'row',

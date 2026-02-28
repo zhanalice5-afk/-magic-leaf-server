@@ -24,6 +24,7 @@ import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { createStyles } from './styles';
 import { Spacing } from '@/constants/theme';
 import { createFormDataFile } from '@/utils';
+import { getApiBaseUrl } from '@/src/config/api';
 
 // Level configurations
 const LEVELS = [
@@ -289,7 +290,7 @@ export default function HomeScreen() {
 
   const fetchRecentBooks = async () => {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books?limit=5`);
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/books?limit=5`);
       const data = await response.json();
       setRecentBooks(data.books || []);
     } catch (error) {
@@ -315,7 +316,7 @@ export default function HomeScreen() {
         
         if (audioData?.base64) {
           // Send to ASR API using base64
-          const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/asr`, {
+          const response = await fetch(`${getApiBaseUrl()}/api/v1/books/asr`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ audioBase64: audioData.base64 }),
@@ -364,7 +365,7 @@ export default function HomeScreen() {
        * 接口：POST /api/v1/books/search
        * Body 参数：query: string, language?: "zh"|"en"|"all", count?: number
        */
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/search`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/books/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery, count: 10 }),
@@ -406,7 +407,7 @@ export default function HomeScreen() {
         const file = await createFormDataFile(asset.uri, 'book-image.jpg', 'image/jpeg');
         formData.append('file', file as any);
         
-        const uploadResponse = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/upload-to-book`, {
+        const uploadResponse = await fetch(`${getApiBaseUrl()}/api/v1/books/upload-to-book`, {
           method: 'POST',
           body: formData,
         });
@@ -428,7 +429,7 @@ export default function HomeScreen() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/books/generate`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/books/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
