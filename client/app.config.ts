@@ -1,7 +1,6 @@
 import { ExpoConfig, ConfigContext } from 'expo/config';
 
 const appName = 'Magic Leaf 双语绘本';
-const projectId = process.env.COZE_PROJECT_ID || process.env.EXPO_PUBLIC_COZE_PROJECT_ID;
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   return {
@@ -16,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     "newArchEnabled": true,
     "extra": {
       "eas": {
-        "projectId": projectId || "magic-leaf-app"
+        "projectId": "0d1970a7-8caf-45c2-89e6-c5d87a87fd45"
       }
     },
     "ios": {
