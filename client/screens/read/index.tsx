@@ -8,10 +8,13 @@ import {
   Animated,
   Dimensions,
   Platform,
+  PanResponder,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Screen } from '@/components/Screen';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
@@ -88,6 +91,178 @@ class CrossPlatformAudio {
   }
 }
 
+// Cross-platform audio recorder - 录制 ASR 支持的格式 (WAV/M4A)
+class CrossPlatformAudioRecorder {
+  private recording: Audio.Recording | null = null;
+  private mediaRecorder: any = null;
+  private audioChunks: any[] = [];
+  private isWeb: boolean;
+  private audioContext: any = null;
+  private mediaStream: any = null;
+  private scriptProcessor: any = null;
+  private pcmData: Float32Array[] = [];
+  private sampleRate: number = 16000;
+
+  constructor() {
+    this.isWeb = Platform.OS === 'web';
+  }
+
+  async start(): Promise<void> {
+    if (this.isWeb) {
+      // Web 使用 Web Audio API 录制 PCM，转换为 WAV
+      try {
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+          }
+        });
+        
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: 16000
+        });
+        
+        const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+        this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+        
+        this.pcmData = [];
+        
+        this.scriptProcessor.onaudioprocess = (e: any) => {
+          const inputData = e.inputBuffer.getChannelData(0);
+          this.pcmData.push(new Float32Array(inputData));
+        };
+        
+        source.connect(this.scriptProcessor);
+        this.scriptProcessor.connect(this.audioContext.destination);
+        
+      } catch (e) {
+        console.error('Failed to start web recording:', e);
+        throw e;
+      }
+    } else {
+      // Mobile 使用 expo-av
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error('Permission denied');
+      }
+      
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      this.recording = recording;
+    }
+  }
+
+  // 将 PCM 数据转换为 WAV 格式
+  private encodeWAV(samples: Float32Array, sampleRate: number): ArrayBuffer {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    
+    // WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    
+    // PCM samples
+    floatTo16BitPCM(view, 44, samples);
+    
+    return buffer;
+  }
+
+  async stop(): Promise<{ base64: string; mimeType: string } | null> {
+    if (this.isWeb) {
+      return new Promise((resolve) => {
+        if (!this.audioContext) {
+          resolve(null);
+          return;
+        }
+        
+        // 停止录制
+        this.scriptProcessor?.disconnect();
+        this.audioContext.close();
+        this.mediaStream?.getTracks().forEach((track: any) => track.stop());
+        
+        // 合并 PCM 数据
+        const totalLength = this.pcmData.reduce((acc, arr) => acc + arr.length, 0);
+        if (totalLength === 0) {
+          resolve(null);
+          return;
+        }
+        
+        const samples = new Float32Array(totalLength);
+        let offset = 0;
+        for (const arr of this.pcmData) {
+          samples.set(arr, offset);
+          offset += arr.length;
+        }
+        
+        // 转换为 WAV
+        const wavBuffer = this.encodeWAV(samples, this.sampleRate);
+        
+        // 转换为 base64
+        const bytes = new Uint8Array(wavBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+        
+        resolve({ base64, mimeType: 'audio/wav' });
+      });
+    } else {
+      if (!this.recording) return null;
+      
+      await this.recording.stopAndUnloadAsync();
+      const uri = this.recording.getURI();
+      this.recording = null;
+      
+      if (uri) {
+        try {
+          const content = await (FileSystem as any).readAsStringAsync(uri, {
+            encoding: 'base64',
+          });
+          return { base64: content, mimeType: 'audio/m4a' };
+        } catch (e) {
+          console.error('Failed to read audio file:', e);
+          return null;
+        }
+      }
+      return null;
+    }
+  }
+}
+
+// PCM 转换辅助函数
+function floatTo16BitPCM(view: DataView, offset: number, input: Float32Array) {
+  for (let i = 0; i < input.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, input[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+}
+
 interface Spotlight {
   object: string;
   phonics: string;
@@ -155,12 +330,76 @@ export default function ReadScreen() {
   const [isProcessingRecording, setIsProcessingRecording] = useState(false);
   
   const audioPlayerRef = useRef<CrossPlatformAudio | null>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const audioRecorderRef = useRef<CrossPlatformAudioRecorder | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  
+  // 滑动手势状态
+  const translateX = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // 水平滑动超过 10px 时响应
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // 限制滑动范围
+        const newValue = Math.max(-width/3, Math.min(width/3, gestureState.dx));
+        translateX.setValue(newValue);
+      },
+      onPanResponderRelease: async (_, gestureState) => {
+        const { dx, vx } = gestureState;
+        const threshold = width * 0.2; // 滑动超过 20% 宽度触发翻页
+        const velocityThreshold = 0.5; // 速度阈值
+        
+        // 左滑（下一页）
+        if ((dx < -threshold || vx < -velocityThreshold) && book && currentPage < book.content.length - 1) {
+          Animated.timing(translateX, {
+            toValue: -width,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            setCurrentPage(currentPage + 1);
+            translateX.setValue(width);
+            Animated.timing(translateX, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }).start();
+          });
+        }
+        // 右滑（上一页）
+        else if ((dx > threshold || vx > velocityThreshold) && currentPage > 0) {
+          Animated.timing(translateX, {
+            toValue: width,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            setCurrentPage(currentPage - 1);
+            translateX.setValue(-width);
+            Animated.timing(translateX, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }).start();
+          });
+        }
+        // 回弹
+        else {
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 50,
+            friction: 10,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   // Initialize audio player
   useEffect(() => {
     audioPlayerRef.current = new CrossPlatformAudio();
+    audioRecorderRef.current = new CrossPlatformAudioRecorder();
     return () => {
       audioPlayerRef.current?.stop();
     };
@@ -294,21 +533,6 @@ export default function ReadScreen() {
   // Recording functions
   const startRecording = async () => {
     try {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') {
-        alert('需要麦克风权限才能录音');
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      recordingRef.current = recording;
       setIsRecording(true);
       setRecordingResult(null);
 
@@ -327,13 +551,19 @@ export default function ReadScreen() {
           }),
         ])
       ).start();
+
+      await audioRecorderRef.current?.start();
     } catch (err) {
       console.error('Failed to start recording:', err);
+      setIsRecording(false);
+      scaleAnim.stopAnimation();
+      scaleAnim.setValue(1);
+      Alert.alert('提示', '无法启动录音，请检查麦克风权限');
     }
   };
 
   const stopRecording = async () => {
-    if (!recordingRef.current) return;
+    if (!audioRecorderRef.current) return;
 
     setIsRecording(false);
     scaleAnim.stopAnimation();
@@ -341,21 +571,43 @@ export default function ReadScreen() {
     setIsProcessingRecording(true);
 
     try {
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
+      const result = await audioRecorderRef.current.stop();
+      
+      if (result && result.base64) {
+        // 调用 ASR 接口进行语音识别
+        const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/asr`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            audioBase64: result.base64,
+            mimeType: result.mimeType,
+          }),
+        });
 
-      if (uri) {
-        // 这里可以调用 ASR 接口进行语音识别
-        // 目前模拟一个简单的反馈
-        const pageData = book?.content[currentPage];
-        if (pageData) {
-          // 模拟语音识别结果
-          setRecordingResult(`你说得很棒！继续保持～`);
+        const data = await response.json();
+        
+        if (data.text) {
+          // 简单的反馈逻辑
+          const recognizedText = data.text;
+          setRecordingResult(`太棒了！你说了："${recognizedText}"`);
+          
+          // 可以根据识别结果给出更智能的反馈
+          const pageData = book?.content[currentPage];
+          if (pageData?.question) {
+            // 检查回答是否包含关键词
+            const keywords = pageData.question.hint?.split(/[,，、]/) || [];
+            const hasKeyword = keywords.some(kw => recognizedText.includes(kw.trim()));
+            if (hasKeyword) {
+              setRecordingResult(`非常正确！你说的是："${recognizedText}"，回答得太好了！🎉`);
+            }
+          }
+        } else {
+          setRecordingResult('没有听清楚，请再试一次～');
         }
       }
     } catch (err) {
-      console.error('Failed to stop recording:', err);
+      console.error('Failed to process recording:', err);
+      setRecordingResult('处理失败，请重试～');
     } finally {
       setIsProcessingRecording(false);
     }
@@ -441,211 +693,227 @@ export default function ReadScreen() {
         <Text style={styles.pageIndicator}>{currentPage + 1} / {totalPages}</Text>
       </View>
 
-      {/* Main Content */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
-        showsVerticalScrollIndicator={false}
+      {/* Main Content with swipe gesture */}
+      <Animated.View 
+        style={{ flex: 1, transform: [{ translateX }] }}
+        {...panResponder.panHandlers}
       >
-        {/* Illustration - 圆形窗户风格 */}
-        <View style={styles.illustrationSection}>
-          <View style={styles.illustrationFrame}>
-            {imageUrl ? (
-              <Image
-                source={{ uri: imageUrl }}
-                style={styles.illustrationImage}
-                contentFit="cover"
-                transition={300}
-              />
-            ) : (
-              <View style={[styles.illustrationImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0E6D3' }]}>
-                <Text style={{ fontSize: 48 }}>🎨</Text>
-                <Text style={{ color: '#8B6914', marginTop: 8 }}>插画生成中...</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Vocabulary - 单词词汇区 */}
-        {currentPageData.spotlight && currentPageData.spotlight.length > 0 && (
-          <View style={styles.vocabularySection}>
-            {currentPageData.spotlight.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.vocabularyItem,
-                  activeWord === item.object && styles.vocabularyItemActive,
-                ]}
-                onPress={() => handlePlayWord(item.object)}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.vocabularyWord,
-                  activeWord === item.object && styles.vocabularyWordActive,
-                ]}>
-                  {item.object}
-                </Text>
-                <Text style={styles.vocabularySpeaker}>
-                  {wordAudioState === item.object ? '🔊' : '🔈'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* Text Section - 双语文本区 */}
-        <View style={styles.textSection}>
-          {/* English */}
-          <View style={styles.textRow}>
-            <Text style={styles.languageLabel}>ENGLISH</Text>
-            <View style={styles.sentenceRow}>
-              <Text style={styles.sentenceText}>{currentPageData.text_en}</Text>
-              <TouchableOpacity
-                style={[
-                  styles.speakButton,
-                  sentenceAudioState.en === 'playing' && styles.speakButtonActive,
-                ]}
-                onPress={() => handlePlaySentence('en')}
-                disabled={sentenceAudioState.en === 'loading'}
-              >
-                <Text style={styles.speakButtonIcon}>
-                  {sentenceAudioState.en === 'loading' ? '⏳' : sentenceAudioState.en === 'playing' ? '⏸' : '🔊'}
-                </Text>
-                <Text style={[
-                  styles.speakButtonText,
-                  sentenceAudioState.en === 'playing' && styles.speakButtonTextActive,
-                ]}>
-                  EN 朗读
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Chinese */}
-          <View style={styles.textRow}>
-            <Text style={styles.languageLabel}>中文</Text>
-            <View style={styles.sentenceRow}>
-              <Text style={[styles.sentenceText, styles.sentenceTextZh]}>
-                {currentPageData.text_zh}
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.speakButton,
-                  sentenceAudioState.zh === 'playing' && styles.speakButtonActive,
-                ]}
-                onPress={() => handlePlaySentence('zh')}
-                disabled={sentenceAudioState.zh === 'loading'}
-              >
-                <Text style={styles.speakButtonIcon}>
-                  {sentenceAudioState.zh === 'loading' ? '⏳' : sentenceAudioState.zh === 'playing' ? '⏸' : '🔊'}
-                </Text>
-                <Text style={[
-                  styles.speakButtonText,
-                  sentenceAudioState.zh === 'playing' && styles.speakButtonTextActive,
-                ]}>
-                  ZH 朗读
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {currentPageData.audio_hint && (
-            <Text style={styles.hint}>💡 {currentPageData.audio_hint}</Text>
-          )}
-        </View>
-
-        {/* Question Section - 互动问题区 */}
-        {currentPageData.question && (
-          <View style={styles.questionSection}>
-            <View style={styles.questionHeader}>
-              <Text style={styles.questionIcon}>❓</Text>
-              <Text style={styles.questionLabel}>互动时刻</Text>
-            </View>
-            <View style={styles.questionCard}>
-              <Text style={styles.questionTextEn}>{currentPageData.question.question_en}</Text>
-              <Text style={styles.questionTextZh}>{currentPageData.question.question_zh}</Text>
-              {currentPageData.question.hint && (
-                <View style={styles.questionHintBox}>
-                  <Text style={styles.questionHintIcon}>💡</Text>
-                  <Text style={styles.questionHintText}>家长提示: {currentPageData.question.hint}</Text>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Illustration - 圆形窗户风格 */}
+          <View style={styles.illustrationSection}>
+            <View style={styles.illustrationFrame}>
+              {imageUrl ? (
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={styles.illustrationImage}
+                  contentFit="cover"
+                  transition={300}
+                />
+              ) : (
+                <View style={[styles.illustrationImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0E6D3' }]}>
+                  <Text style={{ fontSize: 48 }}>🎨</Text>
+                  <Text style={{ color: '#8B6914', marginTop: 8 }}>插画生成中...</Text>
                 </View>
               )}
             </View>
-            <TouchableOpacity 
-              style={styles.answerButton}
-              onPress={() => {
-                // 触发录音功能
-                handleMicPress();
-              }}
-            >
-              <Text style={styles.answerButtonIcon}>🎤</Text>
-              <Text style={styles.answerButtonText}>点我来回答</Text>
-            </TouchableOpacity>
           </View>
-        )}
 
-        {/* Interaction Section - Magic Buddy (only on last page) */}
-        {currentPage === totalPages - 1 && book.interaction && (
-          <View style={styles.interactionSection}>
-            <View style={styles.buddyHeader}>
-              <Text style={styles.buddyStar}>⭐</Text>
-              <Text style={styles.buddyTitle}>Magic Buddy</Text>
-            </View>
-            <View style={styles.buddyQuestion}>
-              {book.interaction.character_dialogue.split('\n').map((line, i) => (
-                <Text key={i} style={i % 2 === 0 ? styles.buddyQuestionEn : styles.buddyQuestionZh}>
-                  {line}
-                </Text>
+          {/* Vocabulary - 单词词汇区 */}
+          {currentPageData.spotlight && currentPageData.spotlight.length > 0 && (
+            <View style={styles.vocabularySection}>
+              {currentPageData.spotlight.map((item, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.vocabularyItem,
+                    activeWord === item.object && styles.vocabularyItemActive,
+                  ]}
+                  onPress={() => handlePlayWord(item.object)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[
+                    styles.vocabularyWord,
+                    activeWord === item.object && styles.vocabularyWordActive,
+                  ]}>
+                    {item.object}
+                  </Text>
+                  <Text style={styles.vocabularySpeaker}>
+                    {wordAudioState === item.object ? '🔊' : '🔈'}
+                  </Text>
+                </TouchableOpacity>
               ))}
-            </View>
-            <TouchableOpacity style={styles.saveButton}>
-              <Text style={styles.saveButtonText}>★ 保存这本绘本到馆</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Practice Section - 口语练习 */}
-        <View style={styles.practiceSection}>
-          <View style={styles.practiceHeader}>
-            <Text style={styles.practiceMicIcon}>🎤</Text>
-            <Text style={styles.practiceTitle}>Practice Time</Text>
-          </View>
-          
-          <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-            <TouchableOpacity
-              style={[styles.micButton, isRecording && styles.micButtonActive]}
-              onPress={handleMicPress}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.micIcon}>{isRecording ? '⏹' : '🎤'}</Text>
-            </TouchableOpacity>
-          </Animated.View>
-          
-          <Text style={styles.practiceHint}>
-            {isProcessingRecording ? '处理中...' : isRecording ? '正在录音，点击停止' : 'Hold to practice speaking'}
-          </Text>
-
-          {recordingResult && (
-            <View style={styles.practiceResult}>
-              <Text style={styles.practiceResultText}>{recordingResult}</Text>
             </View>
           )}
 
-          {/* Progress */}
-          <View style={styles.progressSection}>
-            <View style={styles.progressLabel}>
-              <Text style={styles.progressLabelText}>YOUR PROGRESS</Text>
-              <Text style={styles.progressLabelText}>LEVEL {book.level}</Text>
+          {/* Text Section - 双语文本区 */}
+          <View style={styles.textSection}>
+            {/* English */}
+            <View style={styles.textRow}>
+              <Text style={styles.languageLabel}>ENGLISH</Text>
+              <View style={styles.sentenceRow}>
+                <Text style={styles.sentenceText}>{currentPageData.text_en}</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.speakButton,
+                    sentenceAudioState.en === 'playing' && styles.speakButtonActive,
+                  ]}
+                  onPress={() => handlePlaySentence('en')}
+                  disabled={sentenceAudioState.en === 'loading'}
+                >
+                  <Text style={styles.speakButtonIcon}>
+                    {sentenceAudioState.en === 'loading' ? '⏳' : sentenceAudioState.en === 'playing' ? '⏸' : '🔊'}
+                  </Text>
+                  <Text style={[
+                    styles.speakButtonText,
+                    sentenceAudioState.en === 'playing' && styles.speakButtonTextActive,
+                  ]}>
+                    EN 朗读
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${((currentPage + 1) / totalPages) * 100}%` }]} />
+
+            <View style={styles.divider} />
+
+            {/* Chinese */}
+            <View style={styles.textRow}>
+              <Text style={styles.languageLabel}>中文</Text>
+              <View style={styles.sentenceRow}>
+                <Text style={[styles.sentenceText, styles.sentenceTextZh]}>
+                  {currentPageData.text_zh}
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.speakButton,
+                    sentenceAudioState.zh === 'playing' && styles.speakButtonActive,
+                  ]}
+                  onPress={() => handlePlaySentence('zh')}
+                  disabled={sentenceAudioState.zh === 'loading'}
+                >
+                  <Text style={styles.speakButtonIcon}>
+                    {sentenceAudioState.zh === 'loading' ? '⏳' : sentenceAudioState.zh === 'playing' ? '⏸' : '🔊'}
+                  </Text>
+                  <Text style={[
+                    styles.speakButtonText,
+                    sentenceAudioState.zh === 'playing' && styles.speakButtonTextActive,
+                  ]}>
+                    ZH 朗读
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <Text style={styles.progressPage}>Page {currentPage + 1} of {totalPages}</Text>
+
+            {currentPageData.audio_hint && (
+              <Text style={styles.hint}>💡 {currentPageData.audio_hint}</Text>
+            )}
           </View>
-        </View>
-      </ScrollView>
+
+          {/* Question Section - 互动问题区 */}
+          {currentPageData.question && (
+            <View style={styles.questionSection}>
+              <View style={styles.questionHeader}>
+                <Text style={styles.questionIcon}>❓</Text>
+                <Text style={styles.questionLabel}>互动时刻</Text>
+              </View>
+              <View style={styles.questionCard}>
+                <Text style={styles.questionTextEn}>{currentPageData.question.question_en}</Text>
+                <Text style={styles.questionTextZh}>{currentPageData.question.question_zh}</Text>
+                {currentPageData.question.hint && (
+                  <View style={styles.questionHintBox}>
+                    <Text style={styles.questionHintIcon}>💡</Text>
+                    <Text style={styles.questionHintText}>家长提示: {currentPageData.question.hint}</Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity 
+                style={styles.answerButton}
+                onPress={handleMicPress}
+              >
+                <Text style={styles.answerButtonIcon}>{isRecording ? '⏹' : '🎤'}</Text>
+                <Text style={styles.answerButtonText}>
+                  {isRecording ? '点击停止录音' : isProcessingRecording ? '处理中...' : '点我来回答'}
+                </Text>
+              </TouchableOpacity>
+              
+              {/* 显示录音结果 */}
+              {recordingResult && (
+                <View style={styles.resultBox}>
+                  <Text style={styles.resultText}>{recordingResult}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Interaction Section - Magic Buddy (only on last page) */}
+          {currentPage === totalPages - 1 && book.interaction && (
+            <View style={styles.interactionSection}>
+              <View style={styles.buddyHeader}>
+                <Text style={styles.buddyStar}>⭐</Text>
+                <Text style={styles.buddyTitle}>Magic Buddy</Text>
+              </View>
+              <View style={styles.buddyQuestion}>
+                {book.interaction.character_dialogue.split('\n').map((line, i) => (
+                  <Text key={i} style={i % 2 === 0 ? styles.buddyQuestionEn : styles.buddyQuestionZh}>
+                    {line}
+                  </Text>
+                ))}
+              </View>
+              <TouchableOpacity style={styles.saveButton}>
+                <Text style={styles.saveButtonText}>★ 保存这本绘本到馆</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Practice Section - 口语练习 */}
+          <View style={styles.practiceSection}>
+            <View style={styles.practiceHeader}>
+              <Text style={styles.practiceMicIcon}>🎤</Text>
+              <Text style={styles.practiceTitle}>Practice Time</Text>
+            </View>
+            
+            <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+              <TouchableOpacity
+                style={[styles.micButton, isRecording && styles.micButtonActive]}
+                onPress={handleMicPress}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.micIcon}>{isRecording ? '⏹' : '🎤'}</Text>
+              </TouchableOpacity>
+            </Animated.View>
+            
+            <Text style={styles.practiceHint}>
+              {isProcessingRecording ? '处理中...' : isRecording ? '正在录音，点击停止' : 'Hold to practice speaking'}
+            </Text>
+
+            {recordingResult && !currentPageData.question && (
+              <View style={styles.practiceResult}>
+                <Text style={styles.practiceResultText}>{recordingResult}</Text>
+              </View>
+            )}
+
+            {/* Progress */}
+            <View style={styles.progressSection}>
+              <View style={styles.progressLabel}>
+                <Text style={styles.progressLabelText}>YOUR PROGRESS</Text>
+                <Text style={styles.progressLabelText}>LEVEL {book.level}</Text>
+              </View>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${((currentPage + 1) / totalPages) * 100}%` }]} />
+              </View>
+              <Text style={styles.progressPage}>Page {currentPage + 1} of {totalPages}</Text>
+            </View>
+          </View>
+        </ScrollView>
+      </Animated.View>
+
+      {/* Swipe hint */}
+      <View style={[styles.swipeHint, { bottom: insets.bottom + 120 }]}>
+        <Text style={styles.swipeHintText}>← 左右滑动翻页 →</Text>
+      </View>
 
       {/* Navigation */}
       <View style={[styles.navigation, { paddingBottom: insets.bottom }]}>

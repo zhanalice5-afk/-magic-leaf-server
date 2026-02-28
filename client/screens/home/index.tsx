@@ -60,12 +60,17 @@ const THEME_SUGGESTIONS: Record<number, { emoji: string; name: string }[]> = {
   ],
 };
 
-// Cross-platform audio recorder
+// Cross-platform audio recorder - 录制 ASR 支持的格式 (WAV/M4A)
 class CrossPlatformAudioRecorder {
   private recording: Audio.Recording | null = null;
   private mediaRecorder: any = null;
   private audioChunks: any[] = [];
   private isWeb: boolean;
+  private audioContext: any = null;
+  private mediaStream: any = null;
+  private scriptProcessor: any = null;
+  private pcmData: Float32Array[] = [];
+  private sampleRate: number = 16000;
 
   constructor() {
     this.isWeb = Platform.OS === 'web';
@@ -73,19 +78,34 @@ class CrossPlatformAudioRecorder {
 
   async start(): Promise<void> {
     if (this.isWeb) {
-      // Web 使用 MediaRecorder
+      // Web 使用 Web Audio API 录制 PCM，转换为 WAV
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        this.audioChunks = [];
-        
-        this.mediaRecorder.ondataavailable = (e: any) => {
-          if (e.data.size > 0) {
-            this.audioChunks.push(e.data);
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
           }
+        });
+        
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: 16000
+        });
+        
+        const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+        this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+        
+        this.pcmData = [];
+        
+        this.scriptProcessor.onaudioprocess = (e: any) => {
+          const inputData = e.inputBuffer.getChannelData(0);
+          this.pcmData.push(new Float32Array(inputData));
         };
         
-        this.mediaRecorder.start();
+        source.connect(this.scriptProcessor);
+        this.scriptProcessor.connect(this.audioContext.destination);
+        
       } catch (e) {
         console.error('Failed to start web recording:', e);
         throw e;
@@ -109,33 +129,72 @@ class CrossPlatformAudioRecorder {
     }
   }
 
+  // 将 PCM 数据转换为 WAV 格式
+  private encodeWAV(samples: Float32Array, sampleRate: number): ArrayBuffer {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    
+    // WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    
+    // PCM samples
+    floatTo16BitPCM(view, 44, samples);
+    
+    return buffer;
+  }
+
   async stop(): Promise<{ base64: string; mimeType: string } | null> {
     if (this.isWeb) {
       return new Promise((resolve) => {
-        if (!this.mediaRecorder) {
+        if (!this.audioContext) {
           resolve(null);
           return;
         }
         
-        this.mediaRecorder.onstop = async () => {
-          const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
-          
-          // Convert blob to base64
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64data = reader.result as string;
-            // Remove data URL prefix to get pure base64
-            const base64 = base64data.split(',')[1];
-            resolve({ base64, mimeType: 'audio/webm' });
-          };
-          reader.readAsDataURL(blob);
-        };
+        // 停止录制
+        this.scriptProcessor?.disconnect();
+        this.audioContext.close();
+        this.mediaStream?.getTracks().forEach((track: any) => track.stop());
         
-        this.mediaRecorder.stop();
-        // Stop all tracks
-        if (this.mediaRecorder.stream) {
-          this.mediaRecorder.stream.getTracks().forEach((track: any) => track.stop());
+        // 合并 PCM 数据
+        const totalLength = this.pcmData.reduce((acc, arr) => acc + arr.length, 0);
+        const samples = new Float32Array(totalLength);
+        let offset = 0;
+        for (const arr of this.pcmData) {
+          samples.set(arr, offset);
+          offset += arr.length;
         }
+        
+        // 转换为 WAV
+        const wavBuffer = this.encodeWAV(samples, this.sampleRate);
+        
+        // 转换为 base64
+        const bytes = new Uint8Array(wavBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+        
+        resolve({ base64, mimeType: 'audio/wav' });
       });
     } else {
       if (!this.recording) return null;
@@ -145,7 +204,6 @@ class CrossPlatformAudioRecorder {
       this.recording = null;
       
       if (uri) {
-        // Read file and convert to base64
         try {
           const content = await (FileSystem as any).readAsStringAsync(uri, {
             encoding: 'base64',
@@ -158,6 +216,14 @@ class CrossPlatformAudioRecorder {
       }
       return null;
     }
+  }
+}
+
+// PCM 转换辅助函数
+function floatTo16BitPCM(view: DataView, offset: number, input: Float32Array) {
+  for (let i = 0; i < input.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, input[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
   }
 }
 

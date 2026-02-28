@@ -507,5 +507,35 @@ export const createStyles = (theme: Theme) => {
       fontWeight: '600',
       color: '#FFFFFF',
     },
+    
+    // Result Box - 录音结果展示
+    resultBox: {
+      marginTop: Spacing.md,
+      padding: Spacing.md,
+      backgroundColor: '#FFFFFF',
+      borderRadius: BorderRadius.lg,
+      borderWidth: 1,
+      borderColor: '#4A7C59',
+    },
+    resultText: {
+      fontSize: 15,
+      color: '#2D4A35',
+      textAlign: 'center',
+      lineHeight: 22,
+    },
+    
+    // Swipe Hint - 滑动提示
+    swipeHint: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      opacity: 0.6,
+    },
+    swipeHintText: {
+      fontSize: 13,
+      color: '#6B7B6D',
+      fontWeight: '500',
+    },
   });
 };

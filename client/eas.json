@@ -12,11 +12,17 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_BASE_URL": "https://65fd0868-e3a9-4c6e-991f-bad63a5236d6.dev.coze.site"
       }
     },
     "production": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_BASE_URL": "https://65fd0868-e3a9-4c6e-991f-bad63a5236d6.dev.coze.site"
       }
     }
   },
