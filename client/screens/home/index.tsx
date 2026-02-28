@@ -485,6 +485,10 @@ export default function HomeScreen() {
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: insets.bottom + Spacing['2xl'] }} showsVerticalScrollIndicator={false}>
         {/* Quick Actions */}
         <View style={styles.quickActions}>
+          <TouchableOpacity style={styles.quickActionButton} onPress={() => router.push('/library')}>
+            <Text style={styles.quickActionIcon}>📚</Text>
+            <Text style={styles.quickActionText}>绘本馆</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionButton} onPress={() => setSearchModalVisible(true)}>
             <Text style={styles.quickActionIcon}>🔍</Text>
             <Text style={styles.quickActionText}>搜索绘本</Text>

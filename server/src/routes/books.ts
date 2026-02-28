@@ -73,6 +73,74 @@ router.get("/", async (req, res) => {
 });
 
 /**
+ * GET /api/v1/books/library
+ * 获取绘本馆列表（支持搜索、筛选、排序）
+ * Query参数：search?: string, favorite?: boolean, level?: number, sort?: 'newest'|'oldest'|'level', source?: 'all'|'generated'|'uploaded'
+ */
+router.get("/library", async (req, res) => {
+  try {
+    const { search, favorite, level, sort = "newest", source = "all" } = req.query;
+    const client = getSupabaseClient();
+
+    // 构建查询
+    let query = client.from("books").select("*", { count: "exact" });
+
+    // 搜索
+    if (search && typeof search === "string") {
+      query = query.or(`theme.ilike.%${search}%,interest_tag.ilike.%${search}%`);
+    }
+
+    // 收藏筛选
+    if (favorite === "true") {
+      query = query.eq("is_favorite", true);
+    }
+
+    // 等级筛选
+    if (level) {
+      query = query.eq("level", parseInt(level as string));
+    }
+
+    // 来源筛选
+    if (source !== "all") {
+      query = query.eq("source", source);
+    }
+
+    // 排序
+    if (sort === "newest") {
+      query = query.order("created_at", { ascending: false });
+    } else if (sort === "oldest") {
+      query = query.order("created_at", { ascending: true });
+    } else if (sort === "level") {
+      query = query.order("level", { ascending: true });
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error("Error fetching library books:", error);
+      return res.status(500).json({ error: "Failed to fetch books" });
+    }
+
+    // 获取统计数据
+    const { data: statsData } = await client
+      .from("books")
+      .select("is_favorite, source");
+
+    const stats = {
+      total: statsData?.length || 0,
+      favorites: statsData?.filter((b: any) => b.is_favorite).length || 0,
+      generated: statsData?.filter((b: any) => b.source === "generated" || !b.source).length || 0,
+      uploaded: statsData?.filter((b: any) => b.source === "uploaded").length || 0,
+    };
+
+    res.json({ books: data, stats });
+  } catch (error) {
+    console.error("Error in GET /books/library:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
  * GET /api/v1/books/:id
  * 获取单个绘本详情
  */
@@ -177,6 +245,7 @@ router.post("/generate", async (req, res) => {
         content: contentWithImages,
         interaction: generatedBook.interaction,
         cover_image_url: coverImageUrl,
+        source: "generated",
       })
       .select()
       .single();
@@ -519,6 +588,7 @@ router.post("/upload-to-book", upload.single("file"), async (req, res) => {
           audio_hint: "",
         })),
         interaction: { character_dialogue: "你喜欢这个故事吗？What do you think about this story?" },
+        source: "uploaded",
       })
       .select()
       .single();
@@ -535,6 +605,40 @@ router.post("/upload-to-book", upload.single("file"), async (req, res) => {
   } catch (error) {
     console.error("Error in POST /books/upload-to-book:", error);
     res.status(500).json({ error: "Failed to process uploaded book" });
+  }
+});
+
+/**
+ * POST /api/v1/books/:id/favorite
+ * 切换绘本收藏状态
+ * Body: { is_favorite: boolean }
+ */
+router.post("/:id/favorite", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_favorite } = req.body;
+
+    if (typeof is_favorite !== "boolean") {
+      return res.status(400).json({ error: "is_favorite must be a boolean" });
+    }
+
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from("books")
+      .update({ is_favorite })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error updating favorite:", error);
+      return res.status(500).json({ error: "Failed to update favorite" });
+    }
+
+    res.json({ book: data });
+  } catch (error) {
+    console.error("Error in POST /books/:id/favorite:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

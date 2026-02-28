@@ -124,6 +124,7 @@ export default function RootLayout() {
                 headerShown: false
               }}>
                 <Stack.Screen name="index" options={{ title: "" }} />
+                <Stack.Screen name="library" options={{ title: "经典绘本馆" }} />
                 <Stack.Screen name="read" options={{ title: "阅读绘本" }} />
               </Stack>
               
