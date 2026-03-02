@@ -1,4 +1,5 @@
 import { SearchClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
+import { getCozeConfig, canUseAIFeatures } from "../config/cozeConfig.js";
 
 export interface OnlineBook {
   title: string;
@@ -75,7 +76,7 @@ export async function searchOnlineBooks(
 ): Promise<{ books: OnlineBook[]; summary?: string; sources?: typeof FREE_BOOK_SOURCES }> {
   const { query, language = "all", ageRange, count = 10, headers } = params;
 
-  const config = new Config();
+  const config = getCozeConfig();
   const client = new SearchClient(config, headers);
 
   // 构建搜索查询 - 添加免费和儿童相关关键词
@@ -173,7 +174,7 @@ export async function searchSpecificSource(
   query: string,
   headers?: Record<string, string>
 ): Promise<{ books: OnlineBook[] }> {
-  const config = new Config();
+  const config = getCozeConfig();
   const client = new SearchClient(config, headers);
 
   const searchQuery = `site:${source} ${query} children book`;
@@ -209,7 +210,7 @@ export async function searchBookImages(
   count: number = 10,
   headers?: Record<string, string>
 ): Promise<{ images: Array<{ url: string; title?: string; sourceUrl?: string }> }> {
-  const config = new Config();
+  const config = getCozeConfig();
   const client = new SearchClient(config, headers);
 
   const searchQuery = `${query} children book illustration watercolor`;

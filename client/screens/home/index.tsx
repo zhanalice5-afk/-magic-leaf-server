@@ -485,17 +485,21 @@ export default function HomeScreen() {
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: insets.bottom + Spacing['2xl'] }} showsVerticalScrollIndicator={false}>
         {/* Quick Actions */}
         <View style={styles.quickActions}>
+          <TouchableOpacity style={styles.quickActionButton} onPress={() => router.push('/bookshelf')}>
+            <Text style={styles.quickActionIcon}>📖</Text>
+            <Text style={styles.quickActionText}>我的书架</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionButton} onPress={() => router.push('/library')}>
             <Text style={styles.quickActionIcon}>📚</Text>
             <Text style={styles.quickActionText}>绘本馆</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionButton} onPress={() => setSearchModalVisible(true)}>
             <Text style={styles.quickActionIcon}>🔍</Text>
-            <Text style={styles.quickActionText}>搜索绘本</Text>
+            <Text style={styles.quickActionText}>搜索</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickActionButton} onPress={handleUploadBook} disabled={isUploading}>
             <Text style={styles.quickActionIcon}>📤</Text>
-            <Text style={styles.quickActionText}>{isUploading ? '上传中...' : '上传绘本'}</Text>
+            <Text style={styles.quickActionText}>{isUploading ? '上传中' : '上传'}</Text>
           </TouchableOpacity>
         </View>
 

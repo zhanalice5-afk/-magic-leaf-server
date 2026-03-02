@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
+import { FontAwesome6 } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/hooks/useTheme';
@@ -22,6 +23,9 @@ import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { createStyles } from './styles';
 import { Spacing } from '@/constants/theme';
 import { getApiBaseUrl } from '@/src/config/api';
+import { cacheService, CachedBook, CachedBookPage } from '@/src/services/cacheService';
+import { networkService } from '@/src/services/networkService';
+import { DownloadButton } from '@/src/components/DownloadButton';
 
 const { width, height } = Dimensions.get('window');
 const isSmallScreen = width < 600;
@@ -300,6 +304,9 @@ interface Book {
   content: BookPage[];
   interaction: BookInteraction;
   created_at: string;
+  // 离线缓存相关字段
+  isFromCache?: boolean;
+  isFullyCached?: boolean;
 }
 
 type AudioState = 'idle' | 'loading' | 'playing';
@@ -442,7 +449,7 @@ export default function ReadScreen() {
     await audioPlayerRef.current?.stop();
   };
 
-  // Fetch book data
+  // Fetch book data - 支持离线模式
   useEffect(() => {
     if (!bookId) {
       setError('绘本ID不存在');
@@ -452,19 +459,75 @@ export default function ReadScreen() {
 
     const fetchBook = async () => {
       try {
+        // 首先检查是否有本地缓存
+        const cachedBook = await cacheService.getCachedBook(bookId);
+        const shouldUseOffline = await networkService.shouldUseOfflineMode();
+
+        // 如果离线模式或有完整缓存，使用本地数据
+        if (shouldUseOffline && cachedBook) {
+          console.log('Using cached book (offline mode)');
+          const bookData: Book = {
+            ...cachedBook,
+            isFromCache: true,
+            isFullyCached: true,
+            content: cachedBook.content.map(page => ({
+              ...page,
+              image_url: page.local_image_url || page.image_url,
+            })),
+          };
+          setBook(bookData);
+          setIsLoading(false);
+          return;
+        }
+
+        // 在线模式 - 从服务器获取
         const response = await fetch(
           `${getApiBaseUrl()}/api/v1/books/${bookId}`
         );
         const data = await response.json();
 
         if (data.book) {
-          setBook(data.book);
+          // 检查是否有本地缓存的图片
+          if (cachedBook) {
+            const bookWithLocalImages = {
+              ...data.book,
+              isFromCache: false,
+              isFullyCached: cachedBook.content.every(p => p.local_image_url),
+              content: data.book.content.map((page: BookPage, index: number) => {
+                const cachedPage = cachedBook.content[index];
+                if (cachedPage?.local_image_url) {
+                  return { ...page, image_url: cachedPage.local_image_url };
+                }
+                return page;
+              }),
+            };
+            setBook(bookWithLocalImages);
+          } else {
+            setBook({ ...data.book, isFromCache: false, isFullyCached: false });
+          }
         } else {
           setError('绘本不存在');
         }
       } catch (err) {
         console.error('Failed to fetch book:', err);
-        setError('加载失败，请重试');
+        
+        // 网络错误时尝试使用缓存
+        const cachedBook = await cacheService.getCachedBook(bookId);
+        if (cachedBook) {
+          console.log('Using cached book (network error)');
+          const bookData: Book = {
+            ...cachedBook,
+            isFromCache: true,
+            isFullyCached: true,
+            content: cachedBook.content.map(page => ({
+              ...page,
+              image_url: page.local_image_url || page.image_url,
+            })),
+          };
+          setBook(bookData);
+        } else {
+          setError('加载失败，请检查网络连接');
+        }
       } finally {
         setIsLoading(false);
       }
@@ -757,7 +820,25 @@ export default function ReadScreen() {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{book.theme}</Text>
-        <Text style={styles.pageIndicator}>{currentPage + 1} / {totalPages}</Text>
+        <View style={styles.headerRight}>
+          {/* 离线缓存指示器 */}
+          {book.isFromCache && (
+            <View style={styles.offlineIndicator}>
+              <FontAwesome6 name="plane" size={12} color="#EA580C" />
+              <Text style={styles.offlineText}>离线</Text>
+            </View>
+          )}
+          {/* 下载按钮 */}
+          <DownloadButton
+            bookId={bookId}
+            book={book}
+            size="small"
+            onDownloadComplete={() => {
+              // 重新加载绘本以更新缓存状态
+              setBook(prev => prev ? { ...prev, isFullyCached: true } : prev);
+            }}
+          />
+        </View>
       </View>
 
       {/* Main Content with swipe gesture */}

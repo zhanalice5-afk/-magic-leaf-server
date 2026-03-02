@@ -1,6 +1,7 @@
 import { LLMClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
 import { z } from "zod";
 import type { BookPage, BookInteraction } from "../storage/database/shared/schema.js";
+import { getCozeConfig, canUseAIFeatures } from "../config/cozeConfig.js";
 
 // Spotlight object definition
 const spotlightSchema = z.object({
@@ -109,7 +110,13 @@ const WATERCOLOR_ILLUSTRATION_GUIDE = `
 
 export async function generateBook(params: GenerateBookParams): Promise<GeneratedBook> {
   const { level, theme, interestTag, functionTag, headers } = params;
-  const config = new Config();
+  
+  // 检查是否可以使用 AI 功能
+  if (!canUseAIFeatures()) {
+    throw new Error('AI 功能暂不可用。请配置 COZE_API_KEY 环境变量或在 Coze 开发环境中运行。');
+  }
+  
+  const config = getCozeConfig();
   const client = new LLMClient(config, headers);
 
   const levelConfig = levelConfigs[level];

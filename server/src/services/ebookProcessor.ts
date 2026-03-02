@@ -1,4 +1,5 @@
 import { LLMClient, Config } from "coze-coding-dev-sdk";
+import { getCozeConfig, canUseAIFeatures } from "../config/cozeConfig.js";
 
 export interface ExtractedBookContent {
   title: string;
@@ -18,7 +19,12 @@ export async function extractBookContent(
   text: string,
   headers?: Record<string, string>
 ): Promise<ExtractedBookContent> {
-  const config = new Config();
+  // 检查是否可以使用 AI 功能
+  if (!canUseAIFeatures()) {
+    throw new Error('内容提取功能暂不可用。请配置 COZE_API_KEY 环境变量。');
+  }
+  
+  const config = getCozeConfig();
   const client = new LLMClient(config, headers);
 
   const prompt = `你是一位儿童绘本编辑专家。请将以下文本内容转换为适合4-6岁儿童阅读的双语绘本格式。
@@ -81,7 +87,12 @@ export async function generateIllustrationPrompt(
   pageText: string,
   headers?: Record<string, string>
 ): Promise<string> {
-  const config = new Config();
+  // 检查是否可以使用 AI 功能
+  if (!canUseAIFeatures()) {
+    throw new Error('插画生成功能暂不可用。请配置 COZE_API_KEY 环境变量。');
+  }
+  
+  const config = getCozeConfig();
   const client = new LLMClient(config, headers);
 
   const prompt = `请为以下儿童绘本内容生成一个适合AI生成插画的英文描述。

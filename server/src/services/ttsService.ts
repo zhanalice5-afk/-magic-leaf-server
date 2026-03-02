@@ -1,4 +1,5 @@
 import { TTSClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
+import { getCozeConfig, canUseAIFeatures } from "../config/cozeConfig.js";
 
 export interface SynthesizeSpeechParams {
   text: string;
@@ -35,7 +36,12 @@ export async function synthesizeSpeech(
 ): Promise<SynthesizedAudio> {
   const { text, language, headers } = params;
 
-  const config = new Config();
+  // 检查是否可以使用 AI 功能
+  if (!canUseAIFeatures()) {
+    throw new Error('语音合成功能暂不可用。请配置 COZE_API_KEY 环境变量。');
+  }
+
+  const config = getCozeConfig();
   const client = new TTSClient(config, headers);
 
   const voiceConfig = VOICE_CONFIG[language];

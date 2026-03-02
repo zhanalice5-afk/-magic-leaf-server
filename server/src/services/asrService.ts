@@ -1,4 +1,5 @@
 import { ASRClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
+import { getCozeConfig, canUseAIFeatures } from "../config/cozeConfig.js";
 
 export interface RecognizeSpeechParams {
   audioUrl?: string; // 音频文件URL
@@ -24,7 +25,12 @@ export async function recognizeSpeech(
     throw new Error("Either audioUrl or audioBase64 is required");
   }
 
-  const config = new Config();
+  // 检查是否可以使用 AI 功能
+  if (!canUseAIFeatures()) {
+    throw new Error('语音识别功能暂不可用。请配置 COZE_API_KEY 环境变量。');
+  }
+
+  const config = getCozeConfig();
   const client = new ASRClient(config, headers);
 
   try {

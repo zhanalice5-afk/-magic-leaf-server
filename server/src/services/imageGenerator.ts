@@ -1,5 +1,6 @@
 import { ImageGenerationClient, Config, HeaderUtils } from "coze-coding-dev-sdk";
 import axios from "axios";
+import { getCozeConfig, canUseAIFeatures } from "../config/cozeConfig.js";
 
 export interface GenerateImageParams {
   prompt: string;
@@ -25,7 +26,12 @@ export async function generateBookIllustration(
 ): Promise<GeneratedImage> {
   const { prompt, headers } = params;
   
-  const config = new Config();
+  // 检查是否可以使用 AI 功能
+  if (!canUseAIFeatures()) {
+    throw new Error('图片生成功能暂不可用。请配置 COZE_API_KEY 环境变量。');
+  }
+  
+  const config = getCozeConfig();
   const client = new ImageGenerationClient(config, headers);
 
   // 组合水彩风格前缀和具体描述
@@ -61,7 +67,12 @@ export async function generateBookIllustrations(
   prompts: string[],
   headers?: Record<string, string>
 ): Promise<string[]> {
-  const config = new Config();
+  // 检查是否可以使用 AI 功能
+  if (!canUseAIFeatures()) {
+    throw new Error('图片生成功能暂不可用。请配置 COZE_API_KEY 环境变量。');
+  }
+  
+  const config = getCozeConfig();
   const client = new ImageGenerationClient(config, headers);
 
   const requests = prompts.map((prompt) => ({

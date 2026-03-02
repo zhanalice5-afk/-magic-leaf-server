@@ -39,6 +39,25 @@ export const createStyles = (theme: Theme) => {
       color: '#6B7B6D',
       fontWeight: '500',
     },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    offlineIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#FEF3C7',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      gap: 4,
+    },
+    offlineText: {
+      fontSize: 10,
+      color: '#EA580C',
+      fontWeight: '600',
+    },
     
     // Loading
     loadingContainer: {
