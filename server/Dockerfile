@@ -1,4 +1,4 @@
-# Railway 部署 Dockerfile
+# Railway 部署 Dockerfile - 后端服务
 FROM node:20-alpine
 
 # 安装 pnpm
@@ -6,7 +6,7 @@ RUN npm install -g pnpm
 
 WORKDIR /app
 
-# 复制 package 文件
+# 复制 server 目录下的 package 文件
 COPY package.json ./
 
 # 安装依赖
