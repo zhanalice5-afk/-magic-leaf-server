@@ -11,9 +11,11 @@ const isCozeDevEnvironment = (): boolean => {
   return !!process.env.COZE_SUPABASE_URL;
 };
 
-// 获取 Coze API Key
+// 获取 Coze API Key（支持多个环境变量名）
 const getCozeApiKey = (): string | undefined => {
-  return process.env.COZE_API_KEY;
+  // 优先使用 COZE_WORKLOAD_IDENTITY_API_KEY（SDK 默认环境变量）
+  // 也支持 COZE_API_KEY 作为备选
+  return process.env.COZE_WORKLOAD_IDENTITY_API_KEY || process.env.COZE_API_KEY;
 };
 
 // 创建配置实例
