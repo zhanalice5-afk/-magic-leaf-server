@@ -3,7 +3,7 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 const appName = 'Magic Leaf 双语绘本';
 
 // 开发环境默认后端 URL（支持 Expo Go 预览）
-const DEFAULT_BACKEND_URL = 'https://65fd0868-e3a9-4c6e-991f-bad63a5236d6.dev.coze.site';
+const DEFAULT_BACKEND_URL = 'https://server-production-64b4.up.railway.app';
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   // 优先使用环境变量，否则使用默认值
