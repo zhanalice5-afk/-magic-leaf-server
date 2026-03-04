@@ -558,16 +558,36 @@ export default function ReadScreen() {
     }
 
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, language }),
-      });
+      let audioUri: string | null = null;
 
-      const data = await response.json();
+      // 1. 首先检查本地缓存
+      const cachedAudioUrl = await cacheService.getCachedAudioUrl(text, language);
+      
+      if (cachedAudioUrl) {
+        console.log(`Using cached audio for ${language}: ${text.substring(0, 20)}...`);
+        audioUri = cachedAudioUrl;
+      } else {
+        // 2. 没有缓存，调用 TTS API
+        console.log(`No cache found, calling TTS API for ${language}: ${text.substring(0, 20)}...`);
+        const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, language }),
+        });
 
-      if (data.audioUri) {
-        await audioPlayerRef.current?.play(data.audioUri, () => {
+        const data = await response.json();
+
+        if (data.audioUri) {
+          audioUri = data.audioUri;
+          
+          // 3. 缓存音频 URL 供下次使用
+          await cacheService.cacheAudioUrl(text, language, data.audioUri);
+          console.log(`Cached audio URL for ${language}: ${text.substring(0, 20)}...`);
+        }
+      }
+
+      if (audioUri) {
+        await audioPlayerRef.current?.play(audioUri, () => {
           setSentenceAudioState({ en: 'idle', zh: 'idle' });
         });
         setSentenceAudioState(prev => ({ ...prev, [language]: 'playing' }));
@@ -595,17 +615,33 @@ export default function ReadScreen() {
     setActiveWord(word);
 
     try {
-      // 使用后端 TTS 接口发音单词
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: word, language: 'en' }),
-      });
+      let audioUri: string | null = null;
 
-      const data = await response.json();
+      // 1. 首先检查本地缓存
+      const cachedAudioUrl = await cacheService.getCachedAudioUrl(word, 'en');
+      
+      if (cachedAudioUrl) {
+        console.log(`Using cached audio for word: ${word}`);
+        audioUri = cachedAudioUrl;
+      } else {
+        // 2. 没有缓存，调用 TTS API
+        const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: word, language: 'en' }),
+        });
 
-      if (data.audioUri) {
-        await audioPlayerRef.current?.play(data.audioUri, () => {
+        const data = await response.json();
+
+        if (data.audioUri) {
+          audioUri = data.audioUri;
+          // 3. 缓存音频 URL
+          await cacheService.cacheAudioUrl(word, 'en', data.audioUri);
+        }
+      }
+
+      if (audioUri) {
+        await audioPlayerRef.current?.play(audioUri, () => {
           setWordAudioState(null);
         });
       } else {
@@ -638,16 +674,33 @@ export default function ReadScreen() {
     setQuestionAudioState({ en: language === 'en' ? 'loading' : 'idle', zh: language === 'zh' ? 'loading' : 'idle' });
 
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, language }),
-      });
+      let audioUri: string | null = null;
 
-      const data = await response.json();
+      // 1. 首先检查本地缓存
+      const cachedAudioUrl = await cacheService.getCachedAudioUrl(text, language);
+      
+      if (cachedAudioUrl) {
+        console.log(`Using cached audio for question (${language})`);
+        audioUri = cachedAudioUrl;
+      } else {
+        // 2. 没有缓存，调用 TTS API
+        const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, language }),
+        });
 
-      if (data.audioUri) {
-        await audioPlayerRef.current?.play(data.audioUri, () => {
+        const data = await response.json();
+
+        if (data.audioUri) {
+          audioUri = data.audioUri;
+          // 3. 缓存音频 URL
+          await cacheService.cacheAudioUrl(text, language, data.audioUri);
+        }
+      }
+
+      if (audioUri) {
+        await audioPlayerRef.current?.play(audioUri, () => {
           setQuestionAudioState({ en: 'idle', zh: 'idle' });
         });
         setQuestionAudioState(prev => ({ ...prev, [language]: 'playing' }));
