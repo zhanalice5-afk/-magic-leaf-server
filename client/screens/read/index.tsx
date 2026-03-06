@@ -560,14 +560,40 @@ export default function ReadScreen() {
     try {
       let audioUri: string | null = null;
 
-      // 1. 首先检查本地缓存
-      const cachedAudioUrl = await cacheService.getCachedAudioUrl(text, language);
-      
-      if (cachedAudioUrl) {
-        console.log(`Using cached audio for ${language}: ${text.substring(0, 20)}...`);
-        audioUri = cachedAudioUrl;
-      } else {
-        // 2. 没有缓存，调用 TTS API
+      // 1. 首先检查本地音频文件（离线优先）
+      const cachedBook = await cacheService.getCachedBook(bookId);
+      if (cachedBook) {
+        const cachedPage = cachedBook.content[currentPage];
+        const localAudioPath = language === 'en' 
+          ? cachedPage?.local_audio_en_url 
+          : cachedPage?.local_audio_zh_url;
+        
+        if (localAudioPath) {
+          // 检查文件是否存在
+          try {
+            const FS = FileSystem as any;
+            const fileInfo = await FS.getInfoAsync(localAudioPath);
+            if (fileInfo.exists) {
+              console.log(`Using local audio file for ${language}: ${localAudioPath}`);
+              audioUri = localAudioPath;
+            }
+          } catch (e) {
+            console.log('Local audio file check failed, trying other sources');
+          }
+        }
+      }
+
+      // 2. 如果没有本地文件，检查缓存的远程 URL
+      if (!audioUri) {
+        const cachedAudioUrl = await cacheService.getCachedAudioUrl(text, language);
+        if (cachedAudioUrl) {
+          console.log(`Using cached audio URL for ${language}: ${text.substring(0, 20)}...`);
+          audioUri = cachedAudioUrl;
+        }
+      }
+
+      // 3. 如果都没有，调用 TTS API
+      if (!audioUri) {
         console.log(`No cache found, calling TTS API for ${language}: ${text.substring(0, 20)}...`);
         const response = await fetch(`${getApiBaseUrl()}/api/v1/books/tts`, {
           method: 'POST',
@@ -580,7 +606,7 @@ export default function ReadScreen() {
         if (data.audioUri) {
           audioUri = data.audioUri;
           
-          // 3. 缓存音频 URL 供下次使用
+          // 缓存音频 URL 供下次使用
           await cacheService.cacheAudioUrl(text, language, data.audioUri);
           console.log(`Cached audio URL for ${language}: ${text.substring(0, 20)}...`);
         }
@@ -593,12 +619,14 @@ export default function ReadScreen() {
         setSentenceAudioState(prev => ({ ...prev, [language]: 'playing' }));
       } else {
         setSentenceAudioState({ en: 'idle', zh: 'idle' });
+        Alert.alert('提示', '无法播放语音，请先下载绘本离线包');
       }
     } catch (err) {
       console.error('Failed to play sentence audio:', err);
       setSentenceAudioState({ en: 'idle', zh: 'idle' });
+      Alert.alert('播放失败', '请检查网络连接或下载离线包');
     }
-  }, [book, currentPage, sentenceAudioState]);
+  }, [book, currentPage, sentenceAudioState, bookId]);
 
   // Play word audio
   const handlePlayWord = useCallback(async (word: string) => {

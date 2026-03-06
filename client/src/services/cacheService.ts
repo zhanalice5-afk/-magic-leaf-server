@@ -318,6 +318,18 @@ class CacheService {
       console.error('Failed to delete cached images:', error);
     }
 
+    // 删除音频文件
+    try {
+      const audioFiles = await FS.readDirectoryAsync(AUDIO_DIR);
+      for (const file of audioFiles) {
+        if (file.startsWith(bookId)) {
+          await FS.deleteAsync(`${AUDIO_DIR}${file}`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to delete cached audio:', error);
+    }
+
     // 更新缓存列表
     const list = await this.getCachedBooksList();
     const newList = list.filter(item => item.id !== bookId);
@@ -335,6 +347,15 @@ class CacheService {
       const imageFiles = await FS.readDirectoryAsync(IMAGES_DIR);
       for (const file of imageFiles) {
         const info = await FS.getInfoAsync(`${IMAGES_DIR}${file}`, { size: true });
+        if (info.exists && info.size) {
+          totalSize += info.size;
+        }
+      }
+      
+      // 计算音频目录大小
+      const audioFiles = await FS.readDirectoryAsync(AUDIO_DIR);
+      for (const file of audioFiles) {
+        const info = await FS.getInfoAsync(`${AUDIO_DIR}${file}`, { size: true });
         if (info.exists && info.size) {
           totalSize += info.size;
         }
@@ -359,14 +380,24 @@ class CacheService {
     // 清除缓存列表
     await AsyncStorage.removeItem(CACHE_LIST_KEY);
 
-    // 删除所有缓存文件
+    // 删除所有图片文件
     try {
       const imageFiles = await FS.readDirectoryAsync(IMAGES_DIR);
       for (const file of imageFiles) {
         await FS.deleteAsync(`${IMAGES_DIR}${file}`);
       }
     } catch (error) {
-      console.error('Failed to clear cache files:', error);
+      console.error('Failed to clear image cache:', error);
+    }
+
+    // 删除所有音频文件
+    try {
+      const audioFiles = await FS.readDirectoryAsync(AUDIO_DIR);
+      for (const file of audioFiles) {
+        await FS.deleteAsync(`${AUDIO_DIR}${file}`);
+      }
+    } catch (error) {
+      console.error('Failed to clear audio cache:', error);
     }
   }
 
@@ -466,17 +497,49 @@ class CacheService {
   }
 
   /**
+   * 调用 TTS API 获取音频 URL
+   * @param text 文本内容
+   * @param language 语言
+   * @param apiBaseUrl API 基础 URL
+   * @returns 音频 URL 或 null
+   */
+  private async fetchTtsAudioUrl(text: string, language: 'en' | 'zh', apiBaseUrl: string): Promise<string | null> {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/books/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language }),
+      });
+
+      const data = await response.json();
+      
+      if (data.audioUri) {
+        // 缓存音频 URL
+        await this.cacheAudioUrl(text, language, data.audioUri);
+        return data.audioUri;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`Failed to fetch TTS audio for: ${text.substring(0, 20)}...`, error);
+      return null;
+    }
+  }
+
+  /**
    * 下载绘本的所有图片和音频（包括语音）
    * @param bookId 绘本 ID
    * @param book 绘本数据
    * @param onProgress 进度回调
    * @param includeAudio 是否包含音频（默认 true）
+   * @param apiBaseUrl API 基础 URL（用于获取 TTS 音频）
    */
   async downloadBookAssetsWithAudio(
     bookId: string, 
     book: any, 
     onProgress?: (progress: number) => void,
-    includeAudio: boolean = true
+    includeAudio: boolean = true,
+    apiBaseUrl?: string
   ): Promise<void> {
     await this.init();
 
@@ -503,12 +566,18 @@ class CacheService {
       onProgress?.(downloadedAssets / totalAssets);
 
       // 下载音频（中英文）
-      if (includeAudio) {
+      if (includeAudio && apiBaseUrl) {
         // 英文音频
         if (page.text_en) {
           try {
             // 先尝试从缓存获取音频 URL
-            const audioUrl = await this.getCachedAudioUrl(page.text_en, 'en');
+            let audioUrl = await this.getCachedAudioUrl(page.text_en, 'en');
+            
+            // 如果没有缓存，调用 TTS API 获取
+            if (!audioUrl) {
+              console.log(`Fetching TTS audio for EN: ${page.text_en.substring(0, 20)}...`);
+              audioUrl = await this.fetchTtsAudioUrl(page.text_en, 'en', apiBaseUrl);
+            }
             
             if (audioUrl) {
               // 下载音频文件
@@ -525,7 +594,12 @@ class CacheService {
         // 中文音频
         if (page.text_zh) {
           try {
-            const audioUrl = await this.getCachedAudioUrl(page.text_zh, 'zh');
+            let audioUrl = await this.getCachedAudioUrl(page.text_zh, 'zh');
+            
+            if (!audioUrl) {
+              console.log(`Fetching TTS audio for ZH: ${page.text_zh.substring(0, 20)}...`);
+              audioUrl = await this.fetchTtsAudioUrl(page.text_zh, 'zh', apiBaseUrl);
+            }
             
             if (audioUrl) {
               const localPath = await this.downloadAudioFile(audioUrl, bookId, i, 'zh');
